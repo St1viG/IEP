@@ -105,18 +105,26 @@ The "empty string counts as missing" rule is easy to miss: `"Field <FIELD_NAME> 
 
 ### 1.4 Endpoints
 
-- [ ] `POST /register`. Order: missing field (`forename`, `surname`, `email`, `password`) → `"Invalid email."` → `"Invalid password."` (len < 8) → `"Email already exists."`. On success create the user with the **employee** role and return `200` with an empty body.
-- [ ] `POST /login`. Order: missing field (`email`, `password`) → `"Invalid email."` → `"Invalid credentials."`. Return `{"accessToken": ...}`.
-- [ ] `POST /delete`. `@jwt_required()`, resolve the user from the JWT identity, `"Unknown user."` if gone, else delete and return `200`.
+- [x] `POST /register`. Order: missing field (`forename`, `surname`, `email`, `password`) → `"Invalid email."` → `"Invalid password."` (len < 8) → `"Email already exists."`. On success create the user with the **employee** role and return `200` with an empty body.
+- [x] `POST /login`. Order: missing field (`email`, `password`) → `"Invalid email."` → `"Invalid credentials."`. Return `{"accessToken": ...}`.
+- [x] `POST /delete`. `@jwt_required()`, resolve the user from the JWT identity, `"Unknown user."` if gone, else delete and return `200`.
 
 **Claims.** Identity is the email. Additional claims carry `forename`, `surname`, `email` (same names as registration, no password) plus the role indicator. Follow the course convention and use `"roles": [name for each role]`, matching [`docs/materials/Ispit/EtherBank/decorators.py`](docs/materials/Ispit/EtherBank/decorators.py) so `@role_check("employee")` works unchanged.
 
 **Return shape.** Note `create_access_token` output goes in a field named `accessToken`, not `access_token` as in the examples.
 
+**Read the body with `request.get_json ( silent = True ) or { }`.** The examples index `request.json` directly, which raises `415 Unsupported Media Type` as HTML when the request arrives without a JSON content type, and `400 Bad Request` on malformed JSON. Both replace the graded `{"message": ...}` body with something the grader cannot parse. The `or { }` also covers a literal `null` body, which then falls through to `"Field forename is missing."` as it should.
+
+**Guard the password type before measuring it.** `len ( 12345678 )` raises, and in `/login` `check_password_hash` raises `TypeError` on a non-string. A JSON number in `password` therefore has to be caught: `/register` treats it as `"Invalid password."` and `/login` as `"Invalid credentials."`, which is the closest the spec's fixed message list gets to a type error.
+
+**`/register` depends on the `employee` row already existing.** `Role.query.filter ( Role.name == "employee" ).first ( )` returns `None` on an unseeded database and the append then fails, so the migration Job in 5.2 is what makes registration work at all. Seed roles by hand when running against a fresh local MySQL.
+
+**Port 5000 is not free on macOS.** AirPlay Receiver listens on it and answers every request with an empty `403`, which looks exactly like a broken route in the service. Flask still reports "Running on http://localhost:5000" and loses. Use another port locally (5100 works) or turn AirPlay Receiver off in System Settings > General > AirDrop & Handoff. Containers publish 5000 internally and are unaffected.
+
 ### 1.5 Done when
 
-- [ ] `curl` register → login → decode the token on jwt.io and confirm the claims
-- [ ] A register call with `{"forename": "", "email": "bad"}` returns `"Field forename is missing."`, not the email error
+- [x] `curl` register → login → decode the token on jwt.io and confirm the claims
+- [x] A register call with `{"forename": "", "email": "bad"}` returns `"Field forename is missing."`, not the email error
 
 ---
 
