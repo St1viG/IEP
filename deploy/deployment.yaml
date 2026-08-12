@@ -1,3 +1,5 @@
+name: investment-fund
+
 services:
   database:
     image: mysql
@@ -27,8 +29,8 @@ services:
   migration:
     image: migration
     build:
-      context: .
-      dockerfile: migration.dockerfile
+      context: ..
+      dockerfile: deploy/migration.dockerfile
     environment:
       - DATABASE_USERNAME=root
       - DATABASE_PASSWORD=root
@@ -41,8 +43,8 @@ services:
   authentication:
     image: authentication
     build:
-      context: .
-      dockerfile: authentication.dockerfile
+      context: ..
+      dockerfile: deploy/authentication.dockerfile
     environment:
       - PRODUCTION=True
       - JWT_SECRET_KEY=investment-fund-signing-key
@@ -59,8 +61,8 @@ services:
   employee:
     image: employee
     build:
-      context: .
-      dockerfile: employee.dockerfile
+      context: ..
+      dockerfile: deploy/employee.dockerfile
     environment:
       - PRODUCTION=True
       - JWT_SECRET_KEY=investment-fund-signing-key
@@ -83,8 +85,8 @@ services:
   director:
     image: director
     build:
-      context: .
-      dockerfile: director.dockerfile
+      context: ..
+      dockerfile: deploy/director.dockerfile
     environment:
       - PRODUCTION=True
       - JWT_SECRET_KEY=investment-fund-signing-key

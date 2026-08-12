@@ -9,12 +9,12 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      # output/ holds solc artifacts. A trailing newline appended to Voting.bin
+      # contracts/output/ holds solc artifacts. A trailing newline appended to Voting.bin
       # would be read straight into the deploy transaction as bytecode.
       - id: end-of-file-fixer
-        exclude: ^output/
+        exclude: ^contracts/output/
       - id: trailing-whitespace
-        exclude: ^output/
+        exclude: ^contracts/output/
       # k8s.yaml is deliberately one multi-document file, so the defense is a
       # single kubectl apply.
       - id: check-yaml

@@ -1,3 +1,5 @@
+name: investment-fund
+
 services:
   database:
     image: mysql

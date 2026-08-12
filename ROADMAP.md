@@ -2,7 +2,7 @@
 
 Implementation plan for [`docs/Projekat/IEP_Projekat_2026.md`](docs/Projekat/IEP_Projekat_2026.md).
 
-Code lives at the repo root, where this file sits. `docs/Projekat/` holds only the spec, `docs/materials/` the course examples. All paths below are relative to the root. Tick the checkboxes as you ship each piece.
+Application code lives in `src/`, deployment artifacts in `deploy/`, the contract in `contracts/`. `docs/Projekat/` holds only the spec, `docs/materials/` the course examples. All paths below are relative to the root. Tick the checkboxes as you ship each piece.
 
 ## Principles
 
@@ -16,31 +16,47 @@ Code lives at the repo root, where this file sits. `docs/Projekat/` holds only t
 
 ```
 IEP/
-  configuration.py          # env vars, one Configuration class per concern
-  models.py                 # SQLAlchemy: User, Role, UserRole
-  validation.py             # shared ordered-check helpers
-  decorators.py             # role_check, shared by employee.py and director.py
-  authentication.py         # register / login / delete
-  employee.py               # search / create_buy_order / create_sell_order
-  director.py               # pending_orders / decision / report
-  migrate.py                # create_all + seed director (runs as a k8s Job)
-  utilities.py              # web3 helpers (section 6)
-  voting.sol                # (section 6)
-  output/Voting.abi|.bin    # (section 6, committed like the course examples)
-  *.dockerfile              # one per service, plus one for migration
-  development.yaml          # infra only, Flask runs on host
-  deployment.yaml           # everything in containers
-  k8s.yaml                  # the graded Kubernetes file
-  scenario.py               # end-to-end exercise of every endpoint
+  src/
+    configuration.py        # env vars, one Configuration class per concern
+    models.py               # SQLAlchemy: User, Role, UserRole
+    validation.py           # shared ordered-check helpers
+    decorators.py           # role_check, shared by employee.py and director.py
+    authentication.py       # register / login / delete
+    employee.py             # search / create_buy_order / create_sell_order
+    director.py             # pending_orders / decision / report
+    migrate.py              # create_all + seed director (runs as a k8s Job)
+    utilities.py            # web3 helpers (section 6)
+  contracts/
+    voting.sol              # (section 6)
+    output/Voting.abi|.bin  # solc artifacts, committed
+  deploy/
+    *.dockerfile            # one per service, plus one for migration
+    development.yaml        # infra only, Flask runs on host
+    deployment.yaml         # everything in containers
+    k8s.yaml                # the graded Kubernetes file
   tests/                    # pytest, `-m "not integration"` skips the ones needing containers
-  pytest.ini                # pythonpath = . so tests import the services directly
+  scenario.py               # end-to-end exercise of every endpoint
+  pytest.ini                # pythonpath = src so tests import the services directly
   pyproject.toml            # ruff configuration
   .pre-commit-config.yaml   # ruff + whitespace hooks
   requirements.txt          # what the images install
   requirements-dev.txt      # the above plus pytest, ruff, pre-commit
   venv/                     # gitignored
   docs/Projekat/            # the spec, not code
-  docs/materials/           # course examples to crib from
+  docs/materials/           # course examples, reference only
+```
+
+`src/` is flat rather than a package: the services import each other as `from configuration import Configuration`, which keeps `python src/employee.py` working with no packaging step and lets each dockerfile keep copying single files (`COPY src/employee.py /employee.py`) so an image never ships another service's code.
+
+**Compose resolves relative paths against the compose file's own directory.** With `deployment.yaml` under `deploy/`, `context: .` silently means `deploy/` and every `COPY src/...` fails. It is `context: ..` for that reason. Both compose files also pin `name: investment-fund`, otherwise the project name follows the directory and becomes `deploy`.
+
+Commands, all from the repo root:
+
+```
+docker compose -f deploy/development.yaml up -d      # infra for tests and local runs
+docker compose -f deploy/deployment.yaml build       # the four images
+PORT=5100 python src/authentication.py               # PORT keeps AirPlay off 5000
+kubectl apply -f deploy/k8s.yaml
 ```
 
 ## Style
@@ -268,13 +284,13 @@ On approve or reject, `hdel` the order either way.
 - [x] `scenario.py` runs register → login → create_buy_order → (director) pending_orders → decision approve → search finds the new asset
 - [x] A rejected order vanishes from `pending_orders` and creates nothing in Mongo
 
-`scenario.py` reads `AUTHENTICATION_URL`, `EMPLOYEE_URL` and `DIRECTOR_URL` from the environment, defaulting to `localhost:5000/5001/5002` the way `deployment.yaml` will publish them. Locally the ports have to be moved off 5000 because of the AirPlay collision in 1.5, so the run is:
+`scenario.py` (repo root) reads `AUTHENTICATION_URL`, `EMPLOYEE_URL` and `DIRECTOR_URL` from the environment, defaulting to `localhost:5000/5001/5002` the way `deployment.yaml` will publish them. Locally the ports have to be moved off 5000 because of the AirPlay collision in 1.5, so the run is:
 
 ```
 AUTHENTICATION_URL=http://localhost:5100 EMPLOYEE_URL=http://localhost:5101 DIRECTOR_URL=http://localhost:5102 python scenario.py
 ```
 
-It needs the seeded director, so run `python migrate.py` against a fresh database first.
+It needs the seeded director, so run `python src/migrate.py` against a fresh database first.
 
 ---
 
@@ -366,7 +382,7 @@ The spec's explicit requirements, mapped to the course's house style:
 | Employee service in 3 replicas | `replicas: 3` on that Deployment only |
 | Auto-init of the relational DB | the migration `Job` from 5.2 |
 
-- [x] Write `k8s.yaml` as one multi-document file so the defense is a single `kubectl apply -f k8s.yaml`.
+- [x] Write `deploy/k8s.yaml` as one multi-document file so the defense is a single `kubectl apply -f deploy/k8s.yaml`.
 
 **One `ConfigMap` and one `Secret`, consumed with `envFrom` by every pod.** The database containers read their own bootstrap variables (`MYSQL_DATABASE`, `MONGO_INITDB_ROOT_USERNAME`, `MYSQL_ROOT_PASSWORD`, `MONGO_INITDB_ROOT_PASSWORD`) out of the same two objects, so there is exactly one place where a password or a database name is written down. The extra unrelated variables each container also receives are inert.
 
@@ -385,7 +401,7 @@ The spec's explicit requirements, mapped to the course's house style:
 
 ### 5.4 Done when
 
-- [ ] `kubectl apply -f k8s.yaml` on a clean cluster brings everything up and `scenario.py` passes against the NodePorts
+- [ ] `kubectl apply -f deploy/k8s.yaml` on a clean cluster brings everything up and `scenario.py` passes against the NodePorts
 - [ ] `kubectl delete pod <mysql-pod>` and the data is still there afterwards
 - [ ] `kubectl get pods` shows 3 employee pods
 
@@ -468,7 +484,7 @@ Polling is the pragmatic choice on ganache over HTTP. The alternative is emittin
 
 ## Defense checklist
 
-- [ ] `kubectl apply -f k8s.yaml` from scratch on a clean cluster
+- [ ] `kubectl apply -f deploy/k8s.yaml` from scratch on a clean cluster
 - [ ] Log in as the seeded `onlymoney@gmail.com` director
 - [ ] Register an employee, propose a buy, approve it by vote, show it in `/search` and `/report`
 - [ ] Kill a database pod, show the data survived
