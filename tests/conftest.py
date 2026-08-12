@@ -4,10 +4,26 @@ import pytest
 
 from flask import Flask
 
+from flask_jwt_extended import create_access_token
+
 from configuration import Configuration
 
 from models import database
 from models import Role
+
+
+def build_headers ( application, roles, email = "onlymoney@gmail.com" ):
+    claims = {
+        "forename": "Scrooge",
+        "surname":  "McDuck",
+        "email":    email,
+        "roles":    roles
+    }
+
+    with application.app_context ( ):
+        token = create_access_token ( identity = email, additional_claims = claims )
+
+    return { "Authorization": f"Bearer {token}" }
 
 
 def testing_database_uri ( ):
@@ -71,3 +87,56 @@ def authentication_client ( monkeypatch ):
 
         database.session.remove ( )
         database.drop_all ( )
+
+
+@pytest.fixture
+def employee_service ( monkeypatch ):
+    from pymongo import MongoClient
+
+    probe = MongoClient (
+        host                     = Configuration.MONGO_HOST,
+        port                     = Configuration.MONGO_PORT,
+        username                 = Configuration.MONGO_USERNAME,
+        password                 = Configuration.MONGO_PASSWORD,
+        authSource               = Configuration.MONGO_AUTH_SOURCE,
+        serverSelectionTimeoutMS = 5000
+    )
+
+    try:
+        probe.admin.command ( "ping" )
+    except Exception as error:
+        pytest.skip ( f"MongoDB is not reachable, start development.yaml first: {error}" )
+    finally:
+        probe.close ( )
+
+    monkeypatch.setattr ( Configuration, "MONGO_DATABASE", f"{Configuration.MONGO_DATABASE}_test" )
+
+    import employee
+
+    importlib.reload ( employee )
+
+    employee.assets.delete_many ( { } )
+
+    yield employee
+
+    employee.assets.delete_many ( { } )
+
+
+@pytest.fixture
+def employee_client ( employee_service ):
+    return employee_service.application.test_client ( )
+
+
+@pytest.fixture
+def assets ( employee_service ):
+    return employee_service.assets
+
+
+@pytest.fixture
+def employee_headers ( employee_service ):
+    return build_headers ( employee_service.application, [ "employee" ] )
+
+
+@pytest.fixture
+def director_headers ( employee_service ):
+    return build_headers ( employee_service.application, [ "director" ] )

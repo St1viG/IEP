@@ -19,6 +19,7 @@ IEP/
   configuration.py          # env vars, one Configuration class per concern
   models.py                 # SQLAlchemy: User, Role, UserRole
   validation.py             # shared ordered-check helpers
+  decorators.py             # role_check, shared by employee.py and director.py
   authentication.py         # register / login / delete
   employee.py               # search / create_buy_order / create_sell_order
   director.py               # pending_orders / decision / report
@@ -151,12 +152,16 @@ Fix this shape now and never deviate:
 
 **Store dates as BSON `datetime`, not strings.** Range comparisons on ISO strings happen to work for this format but break the moment a timezone offset differs, and `$gt` on a `datetime` is what the grader will exercise. Convert to ISO 8601 with a `Z` suffix only on the way out.
 
-- [ ] Helper `parse_iso(value)`: `datetime.fromisoformat(value.replace("Z", "+00:00"))`
-- [ ] Helper `serialize(asset)`: `str(_id)` into `id`, datetimes back to ISO 8601, omit `selling_*` when absent
+- [x] Helper `parse_iso(value)`: `datetime.fromisoformat(value.replace("Z", "+00:00"))`
+- [x] Helper `serialize(asset)`: `str(_id)` into `id`, datetimes back to ISO 8601, omit `selling_*` when absent
+
+**Serialize with `value.isoformat(timespec="milliseconds") + "Z"`.** It reproduces the spec's `2026-06-08T22:12:00.000Z` exactly. This is only correct because PyMongo hands back **naive** datetimes in UTC by default; passing `tz_aware = True` to `MongoClient` would make `isoformat` emit its own `+00:00` and the result would end in `+00:00Z`. So do not turn that flag on.
+
+**Everything written to Mongo has to be UTC**, because `parse_iso` turns the incoming `Z` into an aware UTC datetime and PyMongo converts it to UTC before comparing. `datetime.now()` returns naive **local** time, which MongoDB then reads as if it were UTC, so on this machine every write would land two hours in the future and searches would disagree with reality by that much. Write `datetime.now(timezone.utc)` in section 3.3 instead.
 
 ### 2.2 Query construction
 
-- [ ] `POST /search` with `@role_check("employee")`. All fields optional, so build the filter incrementally:
+- [x] `POST /search` with `@role_check("employee")`. All fields optional, so build the filter incrementally:
 
 ```python
 conditions = []
@@ -177,10 +182,14 @@ Three things worth understanding here:
 - **`selling_date: {"$lt": ...}` excludes unsold assets for free.** A document missing the field never matches a range query, which is exactly the "Neprodate imovine ne treba uključiti u rezultat" rule. Do not add extra filtering.
 - **`operator` arrives without the `$`.** The spec example is `"operator": "eq"`, so prepend it. The dotted `field` path is relative to `info`, hence the `f"info.{...}"` prefix.
 
+**Read optional fields with `body.get(name) is not None`, not `if name in body`.** A JSON `null` would otherwise reach `re.escape` or `parse_iso` and raise, and `/search` has no error message to return for it: the spec lists only the missing-header `401` here. Treating `null` as "field not given" is the only reading that keeps the endpoint answering `200`.
+
+**`role_check` lives in `decorators.py`**, copied from the course example. A director token gets `("Invalid role", 401)`, a shape the spec never mentions because it only describes the missing-header case.
+
 ### 2.3 Done when
 
-- [ ] Hand-insert three assets in adminer or `mongosh`, one unsold, and confirm a `selling_date` search omits it
-- [ ] A nested `info_filters` entry like `{"field": "engine.power", "operator": "gt", "value": 100}` filters correctly
+- [x] Hand-insert three assets in adminer or `mongosh`, one unsold, and confirm a `selling_date` search omits it
+- [x] A nested `info_filters` entry like `{"field": "engine.power", "operator": "gt", "value": 100}` filters correctly
 
 ---
 
