@@ -21,6 +21,9 @@ data:
   REDIS_HOST: redis-service
   REDIS_PORT: "6379"
   REDIS_ORDERS: orders
+  REDIS_CONTRACTS: contracts
+
+  BLOCKCHAIN_URL: http://ganache-service:8545
 ---
 apiVersion: v1
 kind: Secret
@@ -229,6 +232,39 @@ spec:
     - protocol: TCP
       port: 6379
       targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ganache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ganache
+  template:
+    metadata:
+      labels:
+        app: ganache
+    spec:
+      containers:
+        - name: ganache
+          image: trufflesuite/ganache-cli
+          ports:
+            - containerPort: 8545
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ganache-service
+spec:
+  type: ClusterIP
+  selector:
+    app: ganache
+  ports:
+    - protocol: TCP
+      port: 8545
+      targetPort: 8545
 ---
 apiVersion: batch/v1
 kind: Job

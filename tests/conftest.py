@@ -116,6 +116,27 @@ def require_redis():
         probe.close()
 
 
+def require_ganache():
+    from web3 import HTTPProvider, Web3
+
+    web3 = Web3(
+        HTTPProvider(configuration.Configuration.BLOCKCHAIN_URL, request_kwargs={"timeout": 10})
+    )
+
+    try:
+        if not web3.is_connected():
+            raise RuntimeError("no response")
+    except Exception as error:
+        pytest.skip(f"ganache is not reachable, start development.yaml first: {error}")
+
+    return web3
+
+
+@pytest.fixture
+def ganache():
+    return require_ganache()
+
+
 @pytest.fixture
 def fund_services(monkeypatch):
     """The employee and director services, bound to a test database and a test orders hash."""
@@ -133,6 +154,11 @@ def fund_services(monkeypatch):
         "REDIS_ORDERS",
         f"{configuration.Configuration.REDIS_ORDERS}_test",
     )
+    monkeypatch.setattr(
+        configuration.Configuration,
+        "REDIS_CONTRACTS",
+        f"{configuration.Configuration.REDIS_CONTRACTS}_test",
+    )
 
     import director
     import employee
@@ -143,6 +169,7 @@ def fund_services(monkeypatch):
     def clear():
         employee.assets.delete_many({})
         employee.redis.delete(configuration.Configuration.REDIS_ORDERS)
+        employee.redis.delete(configuration.Configuration.REDIS_CONTRACTS)
 
     clear()
 
@@ -184,6 +211,11 @@ def assets(employee_service):
 @pytest.fixture
 def orders(employee_service):
     return employee_service.redis
+
+
+@pytest.fixture
+def contracts(director_service):
+    return director_service.redis
 
 
 @pytest.fixture

@@ -426,7 +426,7 @@ This **replaces** the working `/decision` from section 3, so branch or copy it b
 
 ### 6.1 The contract
 
-- [ ] `voting.sol`, in the style of [`docs/materials/Ispit/CourierService/delivery.sol`](docs/materials/Ispit/CourierService/delivery.sol) (constructor takes the participants, `require` guards with exact messages):
+- [x] `contracts/voting.sol`, in the style of [`docs/materials/Ispit/CourierService/delivery.sol`](docs/materials/Ispit/CourierService/delivery.sol) (constructor takes the participants, `require` guards with exact messages):
 
 ```solidity
 pragma solidity ^0.8.18;
@@ -461,14 +461,22 @@ contract Voting {
 
 **Check `ended` before `allowed`.** The spec says *every* attempt after conclusion is rejected with `"Voting ended."`, so that guard has to come first or a late non-voter would get `"Invalid address."` instead.
 
-- [ ] Compile with `py-solc-x` or `solcjs` to `output/Voting.abi` and `output/Voting.bin`, and commit them. Every course example ships the compiled artifacts rather than compiling at runtime.
+- [x] Compile to `contracts/output/Voting.abi` and `contracts/output/Voting.bin`, and commit them. Every course example ships the compiled artifacts rather than compiling at runtime.
+
+```
+solc --evm-version istanbul --abi --bin --overwrite -o contracts/output contracts/voting.sol
+```
+
+**`--evm-version istanbul` is not optional.** The spec mandates the `trufflesuite/ganache-cli` image, which is ganache 6 and understands nothing newer than Istanbul. Default `solc` 0.8.31 emits `PUSH0`, a Shanghai opcode, and deploying that bytecode fails with a bare `VM Exception while processing transaction: invalid opcode` that says nothing about EVM versions. Costs an hour if it first appears on defense day.
+
+**The image is `amd64` only**, so on Apple Silicon it runs emulated and takes 20 to 30 seconds to accept its first connection. Anything that talks to it needs a generous timeout and a readiness loop.
 
 ### 6.2 Rewrite `/decision`
 
-- [ ] New body is `uuid` + `voters`. Order: `"Field uuid is missing."` → `"Invalid uuid."` → `"Field voters is missing."` (absent **or empty list**) → `"Invalid voter address."` → `"Even number of voters."`
-- [ ] Validate addresses with `web3.is_address(...)`.
-- [ ] Deploy the contract, paying from a ganache account. The pattern is [`docs/materials/Ispit/EtherBank/administrator.py:37-53`](docs/materials/Ispit/EtherBank/administrator.py): read the `.abi` and `.bin`, `web3.eth.contract(bytecode=..., abi=...)`, `contract.constructor(voters).build_transaction({...})`, sign, send, take `receipt["contractAddress"]`.
-- [ ] Copy [`docs/materials/Ispit/EtherBank/utilities.py`](docs/materials/Ispit/EtherBank/utilities.py) for `get_web3` and `send_transaction`.
+- [x] New body is `uuid` + `voters`. Order: `"Field uuid is missing."` → `"Invalid uuid."` → `"Field voters is missing."` (absent **or empty list**) → `"Invalid voter address."` → `"Even number of voters."`
+- [x] Validate addresses with `web3.is_address(...)`. It returns `False` rather than raising for a non-string, but `utilities.valid_address` checks the type anyway.
+- [x] Deploy the contract, paying from a ganache account. The pattern is [`docs/materials/Ispit/EtherBank/administrator.py:37-53`](docs/materials/Ispit/EtherBank/administrator.py): read the `.abi` and `.bin`, `web3.eth.contract(bytecode=..., abi=...)`, `contract.constructor(voters).build_transaction({...})`, sign, send, take `receipt["contractAddress"]`.
+- [x] `src/utilities.py` holds `get_web3`, `read_contract`, `deploy_voting`, `vote_transactions`, `voting_status` and `valid_address`. Ganache's first account is unlocked, so `transact` replaces EtherBank's sign-and-send dance and no key is ever handled.
 
 ### 6.3 Two design decisions
 
@@ -480,8 +488,8 @@ contract Voting {
 
 This is the genuinely hard part: the contract concludes at a moment your Flask service is not involved in, yet the service must then write to Mongo and clear Redis.
 
-- [ ] Keep a registry of live contracts, for example a Redis hash `contracts` mapping `uuid` to contract address, written when `/decision` deploys.
-- [ ] Run a background thread in the director service that polls `status()` for each live contract every few seconds. On conclusion: if approved, apply the same Mongo write as section 3.3 (BUY inserts, SELL updates, dates set to the moment of approval); either way remove the order from Redis and the contract from the registry.
+- [x] Keep a registry of live contracts, for example a Redis hash `contracts` mapping `uuid` to contract address, written when `/decision` deploys.
+- [x] Run a background thread in the director service that polls `status()` for each live contract every few seconds. On conclusion: if approved, apply the same Mongo write as section 3.3 (BUY inserts, SELL updates, dates set to the moment of approval); either way remove the order from Redis and the contract from the registry.
 
 Polling is the pragmatic choice on ganache over HTTP. The alternative is emitting a Solidity event and using `contract.events.<Name>.create_filter(...)`, which is cleaner but still needs a polling loop with `HTTPProvider`. Either way this thread starts alongside the app, the same way [`docs/materials/Docker/JWT_ban/user.py:88`](docs/materials/Docker/JWT_ban/user.py) starts its Redis listener.
 
@@ -489,9 +497,15 @@ Polling is the pragmatic choice on ganache over HTTP. The alternative is emittin
 
 ### 6.5 Done when
 
-- [ ] A non-voter address gets `"Invalid address."`, a double vote is rejected, and a vote after conclusion gets `"Voting ended."`
-- [ ] 3 voters, 2 approvals, and the asset appears in Mongo without any further director call
-- [ ] Even-length `voters` is rejected by the endpoint before deployment, and by the constructor as a backstop
+- [x] A non-voter address gets `"Invalid address."`, a double vote is rejected, and a vote after conclusion gets `"Voting ended."`
+- [x] 3 voters, 2 approvals, and the asset appears in Mongo without any further director call
+- [x] Even-length `voters` is rejected by the endpoint before deployment, and by the constructor as a backstop
+
+All three verified against ganache, the last one at both layers. The ordering case matters and holds: a stranger who arrives *after* the vote concluded hears `"Voting ended."`, not `"Invalid address."`, because the `ended` guard is the first `require` in the modifier.
+
+**`apply_concluded_votes()` is one pass, and the thread is just a loop around it.** The tests call the pass directly, so the whole conclusion path is covered without threads, sleeps or flakiness. The thread starts from `__main__` only, with `use_reloader=False`, since Werkzeug's reloader would otherwise run a second poller in a second process, and two pollers race to apply the same approval. Same reason the director stays at one replica.
+
+**The scenario tags every run.** `scenario.py` suffixes its employee email and asset names with a random per-run token, so it can be run repeatedly against a live system without wiping the databases first. Found by running it twice: the second run tripped on its own previous Ferrari.
 
 ---
 
@@ -499,6 +513,6 @@ Polling is the pragmatic choice on ganache over HTTP. The alternative is emittin
 
 - [x] `kubectl apply -f deploy/k8s.yaml` from scratch on a clean cluster
 - [x] Log in as the seeded `onlymoney@gmail.com` director
-- [ ] Register an employee, propose a buy, approve it **by vote**, show it in `/search` and `/report` (the non-voting path is done and passing; the vote is section 6)
+- [x] Register an employee, propose a buy, approve it **by vote**, show it in `/search` and `/report` (this is exactly what `scenario.py` walks through)
 - [x] Kill a database pod, show the data survived
 - [x] Show 3 employee replicas serving traffic

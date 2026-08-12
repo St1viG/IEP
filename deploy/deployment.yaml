@@ -26,6 +26,11 @@ services:
   redis:
     image: redis
 
+  ganache:
+    image: trufflesuite/ganache-cli
+    ports:
+      - 8545:8545
+
   migration:
     image: migration
     build:
@@ -100,8 +105,11 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_ORDERS=orders
+      - REDIS_CONTRACTS=contracts
+      - BLOCKCHAIN_URL=http://ganache:8545
     ports:
       - ${DIRECTOR_PORT:-5002}:5000
     depends_on:
       - mongo
       - redis
+      - ganache
