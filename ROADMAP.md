@@ -350,12 +350,20 @@ The spec's explicit requirements, mapped to the course's house style:
 | Employee service in 3 replicas | `replicas: 3` on that Deployment only |
 | Auto-init of the relational DB | the migration `Job` from 5.2 |
 
-- [ ] Write `k8s.yaml` as one multi-document file so the defense is a single `kubectl apply -f k8s.yaml`.
+- [x] Write `k8s.yaml` as one multi-document file so the defense is a single `kubectl apply -f k8s.yaml`.
+
+**One `ConfigMap` and one `Secret`, consumed with `envFrom` by every pod.** The database containers read their own bootstrap variables (`MYSQL_DATABASE`, `MONGO_INITDB_ROOT_USERNAME`, `MYSQL_ROOT_PASSWORD`, `MONGO_INITDB_ROOT_PASSWORD`) out of the same two objects, so there is exactly one place where a password or a database name is written down. The extra unrelated variables each container also receives are inert.
+
+**The databases are `Deployment`s, not bare `Pod`s like the course examples.** Nothing recreates a deleted Pod, and the defense checklist calls for deleting the MySQL pod and showing the data survived. With a bare Pod that demo ends with no database at all.
+
+**Both database Deployments carry `strategy: Recreate`.** The claims are `ReadWriteOnce`; a rolling update would leave the new pod stuck `ContainerCreating` forever because the old one still holds the volume.
+
+**`imagePullPolicy: Never` on the four local images.** Without it Kubernetes treats `image: employee` as `docker.io/library/employee` and goes looking on Docker Hub, which at best is an `ImagePullBackOff` and at worst pulls somebody else's image with that name. `Never` also makes "you forgot to build the images" fail with an obvious `ErrImageNeverPull`.
 
 **Heads up on the examples.** The k8s examples in this repo mostly do *not* use ConfigMap (they inline `value: "root"`) and run MySQL as a bare `kind: Pod`. The spec explicitly requires ConfigMap and Secret, so follow the spec over the examples here. Borrow the persistence block from `mysql-storage.yaml`, which is the one example that does it properly: `storageClassName: ""` on both PV and PVC plus an explicit `volumeName:` for static binding.
 
-- [ ] Services: `ClusterIP` for the databases, `NodePort` for the three web services so you can reach them during the demo.
-- [ ] `DATABASE_URL` is the **Service name** (the examples pass `"mysql-service"`), resolved by cluster DNS.
+- [x] Services: `ClusterIP` for the databases, `NodePort` for the three web services so you can reach them during the demo. Authentication is `30000`, employee `30001`, director `30002`.
+- [x] `DATABASE_URL` is the **Service name** (the examples pass `"mysql-service"`), resolved by cluster DNS.
 
 **On readiness:** the course examples have no wait-for-DB logic at all and lean on `backoffLimit: 4` with `restartPolicy: Never` so the Job just retries until MySQL accepts connections. That is acceptable, but a readiness probe (`mysqladmin ping`, see [`docs/materials/k8s/examples/mysql-probes.yaml`](docs/materials/k8s/examples/mysql-probes.yaml)) makes the live demo far less nerve-wracking.
 
