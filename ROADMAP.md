@@ -2,7 +2,7 @@
 
 Implementation plan for [`docs/Projekat/IEP_Projekat_2026.md`](docs/Projekat/IEP_Projekat_2026.md).
 
-Code lives in `docs/Projekat/`, next to the spec. Paths below are relative to the repo root, where this file sits. Tick the checkboxes as you ship each piece.
+Code lives at the repo root, where this file sits. `docs/Projekat/` holds only the spec, `docs/materials/` the course examples. All paths below are relative to the root. Tick the checkboxes as you ship each piece.
 
 ## Principles
 
@@ -15,7 +15,7 @@ Code lives in `docs/Projekat/`, next to the spec. Paths below are relative to th
 ## Target layout
 
 ```
-docs/Projekat/
+IEP/
   configuration.py          # env vars, one Configuration class per concern
   models.py                 # SQLAlchemy: User, Role, UserRole
   validation.py             # shared ordered-check helpers
@@ -31,8 +31,16 @@ docs/Projekat/
   deployment.yaml           # everything in containers
   k8s.yaml                  # the graded Kubernetes file
   scenario.py               # end-to-end exercise of every endpoint
-  requirements.txt
+  tests/                    # pytest, `-m "not integration"` skips the ones needing containers
+  pytest.ini                # pythonpath = . so tests import the services directly
+  requirements.txt          # what the images install
+  requirements-dev.txt      # the above plus pytest
+  venv/                     # gitignored
+  docs/Projekat/            # the spec, not code
+  docs/materials/           # course examples to crib from
 ```
+
+No formatter and no pre-commit hook here on purpose: the course house style (`timedelta ( hours = 1 )`, aligned ternaries) is what the examples and the professor read, and `black` or `ruff format` would rewrite all of it.
 
 ---
 
@@ -42,18 +50,22 @@ Everything downstream reads the JWT claims this service issues, so its shape has
 
 ### 1.1 Project setup
 
-- [ ] `python -m venv venv && source venv/bin/activate`
-- [ ] `requirements.txt`: start from [`docs/materials/Ispit/EtherBank/requirements.txt`](docs/materials/Ispit/EtherBank/requirements.txt) and add `pymongo`, `redis`. Drop `web3` until section 6.
-- [ ] `development.yaml` with MySQL (3306), adminer (8080), mongo (27017), redis (6379). Crib the MySQL/adminer block from [`docs/materials/Ispit/EtherBank/development.yaml`](docs/materials/Ispit/EtherBank/development.yaml) and the mongo block from [`docs/materials/mongodb/mongo.yaml`](docs/materials/mongodb/mongo.yaml).
-- [ ] `configuration.py` following [`docs/materials/Ispit/EtherBank/configuration.py`](docs/materials/Ispit/EtherBank/configuration.py): env var with a localhost fallback for every setting. Add `MONGO_*` and `REDIS_*` now so you do not touch it again later.
+- [x] `python -m venv venv && source venv/bin/activate`
+- [x] `requirements.txt`: start from [`docs/materials/Ispit/EtherBank/requirements.txt`](docs/materials/Ispit/EtherBank/requirements.txt) and add `pymongo`, `redis`. Drop `web3` until section 6.
+- [x] `development.yaml` with MySQL (3306), adminer (8080), mongo (27017), redis (6379). Crib the MySQL/adminer block from [`docs/materials/Ispit/EtherBank/development.yaml`](docs/materials/Ispit/EtherBank/development.yaml) and the mongo block from [`docs/materials/mongodb/mongo.yaml`](docs/materials/mongodb/mongo.yaml).
+- [x] `configuration.py` following [`docs/materials/Ispit/EtherBank/configuration.py`](docs/materials/Ispit/EtherBank/configuration.py): env var with a localhost fallback for every setting. Add `MONGO_*` and `REDIS_*` now so you do not touch it again later.
 
 **Gotcha:** EtherBank's `configuration.py:9` has a copy-paste bug, it tests `"DATABASE_NAME" in os.environ` when reading `BLOCKCHAIN_URL`. Do not inherit it.
+
+**Gotcha:** `DATABASE_URL` falls back to `127.0.0.1`, not `localhost`. `mysqlclient` reads the literal host `localhost` as "use the unix socket" and ignores TCP entirely, so it either misses the container or hits a locally installed MySQL. In Compose and Kubernetes the variable is set to the service name, so this fallback only ever applies to local development.
+
+**This machine had MySQL and MongoDB running outside Docker.** Homebrew's `mysql` and `mongodb-community` bind 3306 and 27017 on `127.0.0.1`, which shadows the containers and produces authentication errors that look like a broken compose file. Both are stopped now; restart them with `brew services start mysql` and `launchctl load ~/Library/LaunchAgents/homebrew.mxcl.mongodb-community.plist`. Redis 6379 also collides with the `tikimiki-redis` container from another project.
 
 **Set `JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)`.** The spec says the token is valid for the next hour; EtherBank uses 15 minutes.
 
 ### 1.2 Data model
 
-- [ ] `models.py` with `User`, `Role`, `UserRole`, modelled on [`docs/materials/Ispit/EtherBank/models.py`](docs/materials/Ispit/EtherBank/models.py).
+- [x] `models.py` with `User`, `Role`, `UserRole`, modelled on [`docs/materials/Ispit/EtherBank/models.py`](docs/materials/Ispit/EtherBank/models.py).
 
 ```
 users:      id, forename(256), surname(256), email(256, unique), password(256)
@@ -63,13 +75,33 @@ user_role:  id, user_id -> users.id, role_id -> roles.id
 
 Keep the `secondary = UserRole.__table__` relationship so `user.roles` works. Roles are `director` and `employee`.
 
+**Passwords are hashed**, unlike EtherBank which stores them in plaintext and compares with `User.password == password`. Use `werkzeug.security.generate_password_hash` in `/register` and in `migrate.py` for the seeded director, and `check_password_hash` in `/login`. Werkzeug's default is `scrypt:32768:8:1`, which produces a 162 character string and fits the 256 column with room to spare.
+
+**Do not put a `cascade` on `User.roles`.** A `secondary` relationship already deletes the `user_role` row when the user is deleted, so `POST /delete` needs nothing extra. Adding `cascade = "all, delete"` cascades to the `Role` objects instead: deleting one employee also deletes the `employee` row from `roles`, and the next `/register` then fails on a `None` role. Verified both ways against MySQL before settling on the default.
+
 ### 1.3 Validation helpers
 
-- [ ] `validation.py` with two helpers you will reuse in all three services:
+- [x] `validation.py` with two helpers you will reuse in all three services:
   - `missing_field(body, names)` returns the first name in `names` that is absent or an empty string, else `None`. Iterating a **list** keeps the order deterministic.
   - `valid_email(value)` with a regex such as `^[^@\s]+@[^@\s]+\.[^@\s]+$`.
+  - plus `missing_field_message(name)`, so the graded string with its trailing period is written once rather than at five call sites.
 
 The "empty string counts as missing" rule is easy to miss: `"Field <FIELD_NAME> is missing."` fires both when the key is absent and when the value is a zero-length string.
+
+**Never implement this check with truthiness.** `missing_field` tests `name not in body` and then `isinstance(value, str) and len(value) == 0`, nothing else. Three payloads in this spec are falsy but perfectly valid, and each has its own separate error message that a truthiness check would steal:
+
+| Payload | Endpoint | Correct message |
+|---|---|---|
+| `"approved": false` | `/decision` | none, it is a valid decision |
+| `"buying_price": 0` | `/create_buy_order` | `"Invalid buying price."` |
+| `"categories": []` | `/create_buy_order` | `"Categories list is empty."` |
+
+**`/decision` cannot use a single call.** Its order is `uuid` missing → `"Invalid uuid."` → `approved` missing → `"Invalid decision."`, so the uuid is fully validated before `approved` is even looked at. Call `missing_field(body, ["uuid"])`, validate, then `missing_field(body, ["approved"])`. One call with both names would report `approved` missing while an invalid uuid is still unreported.
+
+**Two deliberately literal readings**, worth a sanity check with the professor if the chance comes up:
+
+- An explicit JSON `null` counts as present, since the spec says "nije prisutno ili je vrednost polja string dužine 0" and `null` is neither. No grader is likely to send one.
+- `valid_email` checks format only and ignores the 256 character cap, because `"Invalid email."` is the spec's only email error. An over-long address would reach the `String(256)` column and raise instead.
 
 ### 1.4 Endpoints
 
