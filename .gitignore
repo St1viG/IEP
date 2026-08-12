@@ -1,4 +1,10 @@
-docs/
+# docs/ is local by default: it holds the course materials and scratch notes.
+# The assignment text is the exception, so README.md can link to it.
+docs/*
+!docs/Projekat/
+docs/Projekat/*
+!docs/Projekat/IEP_Projekat_2026.md
+
 venv/
 __pycache__/
 *.pyc
