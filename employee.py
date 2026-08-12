@@ -1,19 +1,31 @@
+import json
 import os
 import re
+import uuid
 
 from datetime import datetime
 
 from flask import Flask
+from flask import Response
 from flask import request
 from flask import jsonify
 
 from flask_jwt_extended import JWTManager
 
+from bson import ObjectId
+from bson.errors import InvalidId
+
 from pymongo import MongoClient
+
+from redis import Redis
 
 from configuration import Configuration
 
 from decorators import role_check
+
+from validation import missing_field
+from validation import missing_field_message
+from validation import valid_price
 
 application = Flask ( __name__ )
 application.config.from_object ( Configuration )
@@ -29,6 +41,12 @@ client = MongoClient (
 )
 
 assets = client[Configuration.MONGO_DATABASE][Configuration.MONGO_ASSETS]
+
+redis = Redis ( host = Configuration.REDIS_HOST, port = Configuration.REDIS_PORT )
+
+
+def error ( message ):
+    return jsonify ( message = message ), 400
 
 
 def parse_iso ( value ):
@@ -93,6 +111,69 @@ def search ( ):
     query = { "$and": conditions } if ( len ( conditions ) > 0 ) else { }
 
     return jsonify ( assets = [ serialize ( asset ) for asset in assets.find ( query ) ] )
+
+
+@application.route ( "/create_buy_order", methods = ["POST"] )
+@role_check ( "employee" )
+def create_buy_order ( ):
+    body = request.get_json ( silent = True ) or { }
+
+    field = missing_field ( body, [ "name", "categories", "buying_price", "info" ] )
+
+    if ( field is not None ):
+        return error ( missing_field_message ( field ) )
+
+    categories = body["categories"]
+
+    if ( not isinstance ( categories, list ) or len ( categories ) == 0 ):
+        return error ( "Categories list is empty." )
+
+    if ( not valid_price ( body["buying_price"] ) ):
+        return error ( "Invalid buying price." )
+
+    order = {
+        "order_type":   "BUY",
+        "name":         body["name"],
+        "categories":   categories,
+        "buying_price": body["buying_price"],
+        "info":         body["info"]
+    }
+
+    redis.hset ( Configuration.REDIS_ORDERS, str ( uuid.uuid4 ( ) ), json.dumps ( order ) )
+
+    return Response ( status = 200 )
+
+
+@application.route ( "/create_sell_order", methods = ["POST"] )
+@role_check ( "employee" )
+def create_sell_order ( ):
+    body = request.get_json ( silent = True ) or { }
+
+    field = missing_field ( body, [ "id", "selling_price" ] )
+
+    if ( field is not None ):
+        return error ( missing_field_message ( field ) )
+
+    try:
+        identifier = ObjectId ( body["id"] )
+    except ( InvalidId, TypeError ):
+        return error ( "Invalid id." )
+
+    if ( assets.find_one ( { "_id": identifier }, { "_id": 1 } ) is None ):
+        return error ( "Invalid id." )
+
+    if ( not valid_price ( body["selling_price"] ) ):
+        return error ( "Invalid selling price." )
+
+    order = {
+        "order_type":    "SELL",
+        "id":            str ( identifier ),
+        "selling_price": body["selling_price"]
+    }
+
+    redis.hset ( Configuration.REDIS_ORDERS, str ( uuid.uuid4 ( ) ), json.dumps ( order ) )
+
+    return Response ( status = 200 )
 
 
 if ( __name__ == "__main__" ):

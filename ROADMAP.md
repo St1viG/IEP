@@ -43,6 +43,12 @@ IEP/
 
 No formatter and no pre-commit hook here on purpose: the course house style (`timedelta ( hours = 1 )`, aligned ternaries) is what the examples and the professor read, and `black` or `ruff format` would rewrite all of it.
 
+## How the tests reach the services
+
+Each service builds its Flask app, its Mongo handle and its Redis handle at **import time**, straight off `Configuration`. So a test that wants a service pointed somewhere else patches `Configuration` first and then `importlib.reload`s the service module. `conftest.py` does exactly that: `_test` suffixes on the MySQL database, the Mongo database and the Redis orders hash, so a test run never touches what `development.yaml` is serving to `scenario.py`.
+
+**Never hold a module-level reference to the `Configuration` class in test code.** `test_configuration.py` reloads the `configuration` module to check the env-var branches, and every reload binds a **new class object** to `configuration.Configuration`. Anything holding the old one (a `from configuration import Configuration` executed earlier, which is every already-imported module) keeps patching a class nobody reads any more. The failure is silent and nasty: the fixture patches the orphan, the reloaded service reads the live values, and the test suite runs against the development database. It wiped the assets `scenario.py` had just created before this was caught. Two guards now: `test_configuration.py` restores the original class object when it is done, and `conftest.py` resolves `configuration.Configuration` at call time instead of importing the name.
+
 ---
 
 ## Section 1: Authentication service
@@ -199,7 +205,7 @@ This closes the loop: an employee proposes, the director sees it, the director d
 
 ### 3.1 Redis layout
 
-- [ ] One hash keyed by uuid. It gives you write, list, and delete in one call each:
+- [x] One hash keyed by uuid. It gives you write, list, and delete in one call each:
 
 ```python
 redis.hset("orders", order_uuid, json.dumps(order))   # create
@@ -213,34 +219,48 @@ For pub/sub-style Redis usage in this course see [`docs/materials/Docker/JWT_ban
 
 ### 3.2 Employee write endpoints
 
-- [ ] `POST /create_buy_order`. Order: missing field (`name`, `categories`, `buying_price`, `info`) → `"Categories list is empty."` → `"Invalid buying price."`. Store with a fresh `uuid.uuid4()` and return `200` empty.
-- [ ] `POST /create_sell_order`. Order: missing field (`id`, `selling_price`) → `"Invalid id."` → `"Invalid selling price."`.
+- [x] `POST /create_buy_order`. Order: missing field (`name`, `categories`, `buying_price`, `info`) → `"Categories list is empty."` → `"Invalid buying price."`. Store with a fresh `uuid.uuid4()` and return `200` empty.
+- [x] `POST /create_sell_order`. Order: missing field (`id`, `selling_price`) → `"Invalid id."` → `"Invalid selling price."`.
 
-**`"Invalid id."` is two checks in one.** It fires both when the string is not a well-formed `ObjectId` and when no asset with that id exists in Mongo. Wrap `ObjectId(value)` in a `try` and follow it with a `find_one`.
+**`"Invalid id."` is two checks in one.** It fires both when the string is not a well-formed `ObjectId` and when no asset with that id exists in Mongo. Wrap `ObjectId(value)` in a `try` and follow it with a `find_one`. Catch `TypeError` next to `InvalidId`: a JSON number in `id` raises the former, and both mean the same thing to the grader.
 
-**Price validation is type-sensitive.** `"Invalid buying price."` covers "not a number" and "<= 0". Guard against `bool`, since `isinstance(True, int)` is `True` in Python.
+**Price validation is type-sensitive.** `"Invalid buying price."` covers "not a number" and "<= 0". Guard against `bool`, since `isinstance(True, int)` is `True` in Python. Lives in `validation.py` as `valid_price`, shared by both endpoints.
+
+**A `categories` that is not a list also gets `"Categories list is empty."`** The spec never names that case, and every other reading is worse: a bare string would pass a plain length check and then be stored where `$unwind` and the `categories: category` match both expect an array. Checking `isinstance(value, list)` first keeps the stored shape honest.
 
 ### 3.3 Director read and decide
 
-- [ ] `GET /pending_orders` with `@role_check("director")`. Emit the common `uuid` and `order_type`, then the BUY-only or SELL-only fields per the spec.
-- [ ] `POST /decision`. Order: `"Field uuid is missing."` → `"Invalid uuid."` → `"Field approved is missing."` → `"Invalid decision."`.
+- [x] `GET /pending_orders` with `@role_check("director")`. Emit the common `uuid` and `order_type`, then the BUY-only or SELL-only fields per the spec.
+- [x] `POST /decision`. Order: `"Field uuid is missing."` → `"Invalid uuid."` → `"Field approved is missing."` → `"Invalid decision."`.
 
 **`"Invalid uuid."` is also two checks:** malformed UUID (validate with `uuid.UUID(value)`) or no such entry in the Redis hash.
 
 **`"Invalid decision."` means not a real boolean.** `approved` must be JSON `true`/`false`. Reject `"true"` and `1` with `isinstance(value, bool)`.
 
+**`approved` gets no empty-string clause, and that asymmetry is deliberate.** The spec spells `uuid` out as "nije prisutno **ili je vrednost polja string dužine 0**" but writes `approved` as "nije prisutno" alone. So `{"uuid": "<valid>", "approved": ""}` must answer `"Invalid decision."`, not `"Field approved is missing."`. Test `"approved" not in body` directly here rather than reusing `missing_field`, which would steal the empty string.
+
 **Do not use `if not approved` to branch.** `approved` has already been validated as a bool, but writing `if approved is True` documents the intent and survives a later refactor.
 
 On approve:
-- BUY → `insert_one` a new asset with `buying_date = datetime.now()` (the moment of approval, not of proposal)
-- SELL → `update_one` with `$set` for `selling_price` and `selling_date = datetime.now()`
+- BUY → `insert_one` a new asset with `buying_date = datetime.now(timezone.utc)` (the moment of approval, not of proposal)
+- SELL → `update_one` with `$set` for `selling_price` and `selling_date = datetime.now(timezone.utc)`
 
 On approve or reject, `hdel` the order either way.
 
+**Both dates are `datetime.now(timezone.utc)`, never a bare `datetime.now()`.** See the note in 2.1: naive local time is two hours off on this machine and MongoDB would store it as if it were UTC. Verified against `mongosh` after a live approval, the stored instant matches UTC wall clock rather than CEST.
+
 ### 3.4 Done when
 
-- [ ] `scenario.py` runs register → login → create_buy_order → (director) pending_orders → decision approve → search finds the new asset
-- [ ] A rejected order vanishes from `pending_orders` and creates nothing in Mongo
+- [x] `scenario.py` runs register → login → create_buy_order → (director) pending_orders → decision approve → search finds the new asset
+- [x] A rejected order vanishes from `pending_orders` and creates nothing in Mongo
+
+`scenario.py` reads `AUTHENTICATION_URL`, `EMPLOYEE_URL` and `DIRECTOR_URL` from the environment, defaulting to `localhost:5000/5001/5002` the way `deployment.yaml` will publish them. Locally the ports have to be moved off 5000 because of the AirPlay collision in 1.5, so the run is:
+
+```
+AUTHENTICATION_URL=http://localhost:5100 EMPLOYEE_URL=http://localhost:5101 DIRECTOR_URL=http://localhost:5102 python scenario.py
+```
+
+It needs the seeded director, so run `python migrate.py` against a fresh database first.
 
 ---
 
@@ -299,14 +319,14 @@ The app is feature-complete at this point (minus voting). Now make it deployable
 
 The course runs schema creation as a **`kind: Job`**, never an initContainer, and never mounts `init.sql` in k8s. See [`docs/materials/k8s/examples/migration.yaml`](docs/materials/k8s/examples/migration.yaml) and [`docs/materials/k8s/examples/employees/migrate.py`](docs/materials/k8s/examples/employees/migrate.py).
 
-- [ ] `migrate.py`: a minimal Flask app that runs `database.create_all()` inside `app_context()`, then **seeds the roles and the initial director**:
+- [x] `migrate.py`: a minimal Flask app that runs `database.create_all()` inside `app_context()`, then **seeds the roles and the initial director**:
 
 ```json
 {"forename": "Scrooge", "surname": "McDuck",
  "email": "onlymoney@gmail.com", "password": "evenmoremoney"}
 ```
 
-Make the seed idempotent (check for the email before inserting). The Job can be retried by Kubernetes and must not fail or duplicate on a second run.
+Make the seed idempotent (check for the email before inserting). The Job can be retried by Kubernetes and must not fail or duplicate on a second run. Written early, out of section order, because `scenario.py` in 3.4 cannot log a director in without it. Verified by running it twice against the same database.
 
 - [ ] Separate `migration.dockerfile` copying `configuration.py`, `models.py`, `migrate.py`.
 

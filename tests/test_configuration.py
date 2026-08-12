@@ -5,6 +5,13 @@ from datetime import timedelta
 
 import configuration
 
+# Every reload rebinds configuration.Configuration to a brand new class object,
+# which silently orphans the reference every already imported module is holding:
+# the fixtures would then patch one class while the services read another, and a
+# test would run against the real database instead of the _test one. Putting the
+# original class back is what keeps those references valid.
+ORIGINAL = configuration.Configuration
+
 
 def reload_with ( ** overrides ):
     previous = dict ( os.environ )
@@ -14,7 +21,7 @@ def reload_with ( ** overrides ):
     finally:
         os.environ.clear ( )
         os.environ.update ( previous )
-        importlib.reload ( configuration )
+        configuration.Configuration = ORIGINAL
 
 
 def test_defaults_target_the_development_stack ( ):
