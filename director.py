@@ -125,6 +125,24 @@ def decision ( ):
     return Response ( status = 200 )
 
 
+@application.route ( "/report", methods = ["GET"] )
+@role_check ( "director" )
+def report ( ):
+    pipeline = [
+        { "$match": { "selling_date": { "$exists": True }, "selling_price": { "$exists": True } } },
+        { "$unwind": "$categories" },
+        { "$group": {
+            "_id":    "$categories",
+            "spent":  { "$sum": "$buying_price" },
+            "earned": { "$sum": "$selling_price" }
+        } },
+        { "$sort": { "earned": -1, "spent": 1, "_id": 1 } },
+        { "$project": { "_id": 0, "category": "$_id", "spent": 1, "earned": 1 } }
+    ]
+
+    return jsonify ( statistics = list ( assets.aggregate ( pipeline ) ) )
+
+
 if ( __name__ == "__main__" ):
     PORT = os.environ["PORT"] if ( "PORT" in os.environ ) else "5000"
 

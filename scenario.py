@@ -20,7 +20,12 @@ DIRECTOR = {
 
 
 def check ( label, response, status = 200, message = None ):
-    body = response.json ( ) if ( response.content ) else None
+    # role_check answers "Invalid role" as plain text, a body the spec never
+    # describes, so not every response here is JSON.
+    try:
+        body = response.json ( )
+    except ValueError:
+        body = response.text
 
     if ( response.status_code != status or ( message is not None and body["message"] != message ) ):
         raise AssertionError ( f"{label}: expected {status} {message}, got {response.status_code} {body}" )
@@ -196,6 +201,31 @@ sold = check (
 
 assert [ asset["id"] for asset in sold ] == [ asset_id ], sold
 assert sold[0]["selling_price"] == 700000, sold[0]
+
+# --- and it shows up in the report -----------------------------------------
+
+check (
+    "read the report with an employee token",
+    requests.get ( url = DIRECTOR_URL + "/report", headers = authorization ( employee_token ) ),
+    status = 401
+)
+
+statistics = check (
+    "read the report",
+    requests.get ( url = DIRECTOR_URL + "/report", headers = authorization ( director_token ) )
+)["statistics"]
+
+for category in [ "vehicles", "luxury" ]:
+    row = [ entry for entry in statistics if ( entry["category"] == category ) ][0]
+
+    assert row["spent"] >= 500000, row
+    assert row["earned"] >= 700000, row
+
+# Holds whatever else the fund already owned: earned descending, then spent
+# ascending, then category ascending.
+sort_keys = [ ( - entry["earned"], entry["spent"], entry["category"] ) for entry in statistics ]
+
+assert sort_keys == sorted ( sort_keys ), statistics
 
 # --- a rejected proposal leaves no trace -----------------------------------
 

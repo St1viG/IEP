@@ -270,7 +270,7 @@ One endpoint, but it is the PyMongo aggregation showcase.
 
 ### 4.1 Pipeline
 
-- [ ] `GET /report` with `@role_check("director")`:
+- [x] `GET /report` with `@role_check("director")`:
 
 ```python
 pipeline = [
@@ -297,12 +297,14 @@ The spec says "U obračun zarade ulazi samo imovine koje su prodate". It is ambi
 - **Reading A (used above):** unsold assets are excluded entirely, so `spent` only counts assets that were later sold.
 - **Reading B:** every asset contributes to `spent`, but only sold ones contribute to `earned`.
 
-Reading A is the more natural parse of "obračun zarade" as the statistic as a whole, and it keeps `spent` and `earned` comparable per category. Reading B is a one-line change (drop the `$match`, wrap the `earned` sum in a `$cond`). Confirm before the defense.
+Reading A is the more natural parse of "obračun zarade" as the statistic as a whole, and it keeps `spent` and `earned` comparable per category. Reading B is a one-line change (drop the `$match`, wrap the `earned` sum in a `$cond`). Confirm before the defense. `tests/test_report.py::test_an_unsold_asset_contributes_to_neither_column` is the test that pins the choice down, so switching readings means editing that one test and the `$match`.
+
+**The `$match` demands both `selling_price` and `selling_date`.** The spec defines a sold asset as one that has both ("imovina koja ima definisanu cenu prodaje i datum prodaje"), and `/decision` only ever writes the pair together, so a document carrying one without the other is corrupt and stays out of the report.
 
 ### 4.3 Done when
 
-- [ ] An asset in two categories shows its full price in both rows
-- [ ] Two categories with equal `earned` come back ordered by ascending `spent`
+- [x] An asset in two categories shows its full price in both rows
+- [x] Two categories with equal `earned` come back ordered by ascending `spent`
 
 ---
 
