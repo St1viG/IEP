@@ -399,11 +399,24 @@ The spec's explicit requirements, mapped to the course's house style:
 
 **On readiness:** the course examples have no wait-for-DB logic at all and lean on `backoffLimit: 4` with `restartPolicy: Never` so the Job just retries until MySQL accepts connections. That is acceptable, but a readiness probe (`mysqladmin ping`, see [`docs/materials/k8s/examples/mysql-probes.yaml`](docs/materials/k8s/examples/mysql-probes.yaml)) makes the live demo far less nerve-wracking.
 
+**Retries alone were not enough, measured.** On the first real apply the migration Job failed three times with `Can't connect to server on 'mysql-service' (115)` and only succeeded on the **fourth and last** attempt, 86 seconds in, because MySQL needs about a minute to initialise an empty data directory. One slower disk on defense day and the Job exhausts `backoffLimit`, the seeded director never exists, and nothing can log in. The readiness probe does not help here: it gates the Service endpoints, not the Job's start.
+
+The fix is a busybox `initContainer` on the Job that blocks on `until nc -z mysql-service 3306`. Re-verified against a wiped data directory: one pod, no errors, complete in 18 seconds. The three web services need no such wait, because SQLAlchemy, PyMongo and redis-py all connect lazily on first use.
+
 ### 5.4 Done when
 
-- [ ] `kubectl apply -f deploy/k8s.yaml` on a clean cluster brings everything up and `scenario.py` passes against the NodePorts
-- [ ] `kubectl delete pod <mysql-pod>` and the data is still there afterwards
-- [ ] `kubectl get pods` shows 3 employee pods
+- [x] `kubectl apply -f deploy/k8s.yaml` on a clean cluster brings everything up and `scenario.py` passes against the NodePorts
+- [x] `kubectl delete pod <mysql-pod>` and the data is still there afterwards
+- [x] `kubectl get pods` shows 3 employee pods
+
+Verified against Docker Desktop's Kubernetes (kind mode, v1.34.3), from a wiped cluster and wiped node data. Both databases keep their contents across a pod delete: the seeded director and both roles survive in MySQL, the sold Ferrari survives in Mongo.
+
+**Two local quirks that are not manifest bugs, but will bite during a rehearsal:**
+
+- **Local images are invisible to a kind-mode cluster.** The node has its own containerd store, so `imagePullPolicy: Never` fails with `ErrImageNeverPull` until each image is imported:
+  `docker save "${img}:latest" | docker exec -i desktop-control-plane ctr -n k8s.io images import -`
+  (Use `${img}`, not `$img:latest`: zsh reads `:l` as the lowercase modifier and silently mangles the tag.) With minikube it is `minikube image load` instead.
+- **NodePorts are not published on the host** in Docker Desktop's kind mode, so `curl localhost:30000` connects to nothing. Either run the cluster with `extraPortMappings`, or drive the demo through `kubectl port-forward service/authentication-service 5200:5000`. The scenario passed through port-forwards, which still exercises Service to Deployment to pod including the three employee replicas.
 
 ---
 
@@ -484,8 +497,8 @@ Polling is the pragmatic choice on ganache over HTTP. The alternative is emittin
 
 ## Defense checklist
 
-- [ ] `kubectl apply -f deploy/k8s.yaml` from scratch on a clean cluster
-- [ ] Log in as the seeded `onlymoney@gmail.com` director
-- [ ] Register an employee, propose a buy, approve it by vote, show it in `/search` and `/report`
-- [ ] Kill a database pod, show the data survived
-- [ ] Show 3 employee replicas serving traffic
+- [x] `kubectl apply -f deploy/k8s.yaml` from scratch on a clean cluster
+- [x] Log in as the seeded `onlymoney@gmail.com` director
+- [ ] Register an employee, propose a buy, approve it **by vote**, show it in `/search` and `/report` (the non-voting path is done and passing; the vote is section 6)
+- [x] Kill a database pod, show the data survived
+- [x] Show 3 employee replicas serving traffic

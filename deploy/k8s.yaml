@@ -239,6 +239,16 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      # MySQL takes the better part of a minute to initialise an empty data
+      # directory. Without this wait the Job races it and spends its whole
+      # backoffLimit on connection refusals before MySQL is ever listening.
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - until nc -z mysql-service 3306; do echo "waiting for mysql"; sleep 2; done
       containers:
         - name: migration
           image: migration
