@@ -23,6 +23,13 @@ class Configuration:
         f"mysql://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_URL}/{DATABASE_NAME}"
     )
 
+    # Kubernetes replaces the MySQL pod on any restart, and the new one answers
+    # on a new address. Without a liveness check on checkout, every pooled
+    # connection in this process still points at the pod that is gone and each
+    # request fails with "Lost connection to server during query" until the
+    # service itself is restarted by hand.
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
+
     # Shared by all three services: a token issued by authentication has to verify
     # in employee and director, so they must agree on this value.
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "development-secret-key")

@@ -51,7 +51,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath:
-    path: /tmp/investment-fund-mysql
+    path: /var/local/investment-fund/mysql
     type: DirectoryOrCreate
 ---
 apiVersion: v1
@@ -79,7 +79,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath:
-    path: /tmp/investment-fund-mongo
+    path: /var/local/investment-fund/mongo
     type: DirectoryOrCreate
 ---
 apiVersion: v1

@@ -411,6 +411,11 @@ The fix is a busybox `initContainer` on the Job that blocks on `until nc -z mysq
 
 Verified against Docker Desktop's Kubernetes (kind mode, v1.34.3), from a wiped cluster and wiped node data. Both databases keep their contents across a pod delete: the seeded director and both roles survive in MySQL, the sold Ferrari survives in Mongo.
 
+**Two defects the first cluster run did not catch, both found after a Docker Desktop crash:**
+
+- **`hostPath` under `/tmp` is not durable.** The course example parks MySQL's volume in `/tmp`, and kind nodes run systemd, which clears `/tmp` on boot. After the node restarted, the volume was still bound but empty, MySQL re-initialised it, and every table was gone. Both PVs now live under `/var/local/investment-fund/`. Worse, nothing rebuilds the schema on its own: a `Job` that has already completed will not re-run, so recovering means `kubectl delete job migration-job` and applying again.
+- **A replaced database pod stranded the application.** MySQL comes back at a new address, but SQLAlchemy's pooled connections still pointed at the pod that was gone, so every request failed with `Lost connection to server during query` until the service was restarted by hand. `SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}` makes SQLAlchemy check a connection before handing it out, and the pool heals itself. Verified by deleting the MySQL pod and logging in again with no restart of the authentication service, which is precisely the defense checklist's persistence demo.
+
 **Two local quirks that are not manifest bugs, but will bite during a rehearsal:**
 
 - **Local images are invisible to a kind-mode cluster.** The node has its own containerd store, so `imagePullPolicy: Never` fails with `ErrImageNeverPull` until each image is imported:
