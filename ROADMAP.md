@@ -314,8 +314,14 @@ The app is feature-complete at this point (minus voting). Now make it deployable
 
 ### 5.1 Dockerfiles
 
-- [ ] One per service, copying only what that service imports. Template: [`docs/materials/Ispit/EtherBank/authentication.dockerfile`](docs/materials/Ispit/EtherBank/authentication.dockerfile).
-- [ ] `deployment.yaml` for Compose, everything containerized, modelled on [`docs/materials/Ispit/EtherBank/deployment.yaml`](docs/materials/Ispit/EtherBank/deployment.yaml). Get this green before touching k8s: it is the same env-var wiring with far faster feedback.
+- [x] One per service, copying only what that service imports. Template: [`docs/materials/Ispit/EtherBank/authentication.dockerfile`](docs/materials/Ispit/EtherBank/authentication.dockerfile).
+- [x] `deployment.yaml` for Compose, everything containerized, modelled on [`docs/materials/Ispit/EtherBank/deployment.yaml`](docs/materials/Ispit/EtherBank/deployment.yaml). Get this green before touching k8s: it is the same env-var wiring with far faster feedback.
+
+`authentication` copies `models.py` and `validation.py`; `employee` and `director` copy `decorators.py` and `validation.py` but no models, since neither speaks SQL. All four install the one `requirements.txt`. `mysqlclient` compiles on plain `python:3` with no extra apt packages, so the course's bare `FROM python:3` needs nothing added.
+
+**Compose starts things in the right order with two conditions rather than a wait script.** `database` gets a `mysqladmin ping` healthcheck, `migration` waits for `service_healthy`, and `authentication` waits for the migration's `service_completed_successfully`. The employee and director services only need `mongo` and `redis`, both of which their clients connect to lazily.
+
+**The published ports are `${AUTHENTICATION_PORT:-5000}` and friends.** The defaults are the 5000/5001/5002 that `scenario.py` expects, but on this machine Docker cannot even bind 5000 (`address already in use`, the AirPlay collision from 1.5 again), and unlike Flask it fails loudly. So locally: `AUTHENTICATION_PORT=5100 docker compose -f deployment.yaml up -d`.
 
 ### 5.2 Migration image
 
@@ -330,7 +336,7 @@ The course runs schema creation as a **`kind: Job`**, never an initContainer, an
 
 Make the seed idempotent (check for the email before inserting). The Job can be retried by Kubernetes and must not fail or duplicate on a second run. Written early, out of section order, because `scenario.py` in 3.4 cannot log a director in without it. Verified by running it twice against the same database.
 
-- [ ] Separate `migration.dockerfile` copying `configuration.py`, `models.py`, `migrate.py`.
+- [x] Separate `migration.dockerfile` copying `configuration.py`, `models.py`, `migrate.py`.
 
 ### 5.3 The graded k8s file
 
