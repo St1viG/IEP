@@ -45,6 +45,7 @@ services:
       dockerfile: authentication.dockerfile
     environment:
       - PRODUCTION=True
+      - JWT_SECRET_KEY=investment-fund-signing-key
       - DATABASE_USERNAME=root
       - DATABASE_PASSWORD=root
       - DATABASE_URL=database
@@ -62,6 +63,7 @@ services:
       dockerfile: employee.dockerfile
     environment:
       - PRODUCTION=True
+      - JWT_SECRET_KEY=investment-fund-signing-key
       - MONGO_HOST=mongo
       - MONGO_PORT=27017
       - MONGO_USERNAME=root
@@ -85,6 +87,7 @@ services:
       dockerfile: director.dockerfile
     environment:
       - PRODUCTION=True
+      - JWT_SECRET_KEY=investment-fund-signing-key
       - MONGO_HOST=mongo
       - MONGO_PORT=27017
       - MONGO_USERNAME=root

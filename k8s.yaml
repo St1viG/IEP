@@ -32,6 +32,9 @@ stringData:
   MYSQL_ROOT_PASSWORD: root
   MONGO_PASSWORD: example
   MONGO_INITDB_ROOT_PASSWORD: example
+  # Signs the access tokens. All three services verify against it, so it has to
+  # be one value shared by all of them.
+  JWT_SECRET_KEY: investment-fund-signing-key
 ---
 apiVersion: v1
 kind: PersistentVolume

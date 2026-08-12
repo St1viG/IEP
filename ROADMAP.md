@@ -34,14 +34,24 @@ IEP/
   scenario.py               # end-to-end exercise of every endpoint
   tests/                    # pytest, `-m "not integration"` skips the ones needing containers
   pytest.ini                # pythonpath = . so tests import the services directly
+  pyproject.toml            # ruff configuration
+  .pre-commit-config.yaml   # ruff + whitespace hooks
   requirements.txt          # what the images install
-  requirements-dev.txt      # the above plus pytest
+  requirements-dev.txt      # the above plus pytest, ruff, pre-commit
   venv/                     # gitignored
   docs/Projekat/            # the spec, not code
   docs/materials/           # course examples to crib from
 ```
 
-No formatter and no pre-commit hook here on purpose: the course house style (`timedelta ( hours = 1 )`, aligned ternaries) is what the examples and the professor read, and `black` or `ruff format` would rewrite all of it.
+## Style
+
+**PEP 8, enforced by `ruff`, not the course house style.** The examples under `docs/materials/` are written as `timedelta ( hours = 1 )` with spaces inside every paren and aligned `=` columns, and the first cut of this project copied that. It is gone. The spec dictates the libraries, the error strings, the response field names and the deployment artifacts; it says nothing about formatting or file layout, so those follow normal Python practice instead of a teaching example.
+
+- `pyproject.toml` configures `ruff` (100 column lines, pycodestyle + pyflakes + isort + pyupgrade + bugbear + simplify).
+- `.pre-commit-config.yaml` runs `ruff check --fix`, `ruff format` and the usual whitespace/YAML hooks. Install once with `pre-commit install`.
+- `check-yaml` needs `--allow-multiple-documents`, because `k8s.yaml` is deliberately one multi-document file.
+
+The one idiom worth calling out as replaced: `X = os.environ["X"] if ("X" in os.environ) else default` throughout `configuration.py` is now `os.environ.get("X", default)`, which is what `ruff`'s SIM401 asks for and what the same code would look like anywhere else.
 
 ## How the tests reach the services
 
@@ -120,11 +130,11 @@ The "empty string counts as missing" rule is easy to miss: `"Field <FIELD_NAME> 
 
 **Return shape.** Note `create_access_token` output goes in a field named `accessToken`, not `access_token` as in the examples.
 
-**Read the body with `request.get_json ( silent = True ) or { }`.** The examples index `request.json` directly, which raises `415 Unsupported Media Type` as HTML when the request arrives without a JSON content type, and `400 Bad Request` on malformed JSON. Both replace the graded `{"message": ...}` body with something the grader cannot parse. The `or { }` also covers a literal `null` body, which then falls through to `"Field forename is missing."` as it should.
+**Read the body with `request.get_json(silent=True) or {}`.** The examples index `request.json` directly, which raises `415 Unsupported Media Type` as HTML when the request arrives without a JSON content type, and `400 Bad Request` on malformed JSON. Both replace the graded `{"message": ...}` body with something the grader cannot parse. The `or { }` also covers a literal `null` body, which then falls through to `"Field forename is missing."` as it should.
 
-**Guard the password type before measuring it.** `len ( 12345678 )` raises, and in `/login` `check_password_hash` raises `TypeError` on a non-string. A JSON number in `password` therefore has to be caught: `/register` treats it as `"Invalid password."` and `/login` as `"Invalid credentials."`, which is the closest the spec's fixed message list gets to a type error.
+**Guard the password type before measuring it.** `len(12345678)` raises, and in `/login` `check_password_hash` raises `TypeError` on a non-string. A JSON number in `password` therefore has to be caught: `/register` treats it as `"Invalid password."` and `/login` as `"Invalid credentials."`, which is the closest the spec's fixed message list gets to a type error.
 
-**`/register` depends on the `employee` row already existing.** `Role.query.filter ( Role.name == "employee" ).first ( )` returns `None` on an unseeded database and the append then fails, so the migration Job in 5.2 is what makes registration work at all. Seed roles by hand when running against a fresh local MySQL.
+**`/register` depends on the `employee` row already existing.** `Role.query.filter(Role.name == "employee").first()` returns `None` on an unseeded database and the append then fails, so the migration Job in 5.2 is what makes registration work at all. Seed roles by hand when running against a fresh local MySQL.
 
 **Port 5000 is not free on macOS.** AirPlay Receiver listens on it and answers every request with an empty `403`, which looks exactly like a broken route in the service. Flask still reports "Running on http://localhost:5000" and loses. Use another port locally (5100 works) or turn AirPlay Receiver off in System Settings > General > AirDrop & Handoff. Containers publish 5000 internally and are unaffected.
 
@@ -145,14 +155,14 @@ Fix this shape now and never deviate:
 
 ```python
 {
-  "_id": ObjectId,
-  "name": str,
-  "categories": [str],
-  "buying_price": number,
-  "buying_date": datetime,     # native BSON datetime, NOT a string
-  "selling_price": number,     # absent until sold
-  "selling_date": datetime,    # absent until sold
-  "info": { ... }              # arbitrary nesting
+    "_id": ObjectId,
+    "name": str,
+    "categories": [str],
+    "buying_price": number,
+    "buying_date": datetime,  # native BSON datetime, NOT a string
+    "selling_price": number,  # absent until sold
+    "selling_date": datetime,  # absent until sold
+    "info": {...},  # arbitrary nesting
 }
 ```
 
@@ -171,10 +181,14 @@ Fix this shape now and never deviate:
 
 ```python
 conditions = []
-if name:         conditions.append({"name": {"$regex": re.escape(name)}})
-if category:     conditions.append({"categories": category})
-if buying_date:  conditions.append({"buying_date": {"$gt": parse_iso(buying_date)}})
-if selling_date: conditions.append({"selling_date": {"$lt": parse_iso(selling_date)}})
+if name:
+    conditions.append({"name": {"$regex": re.escape(name)}})
+if category:
+    conditions.append({"categories": category})
+if buying_date:
+    conditions.append({"buying_date": {"$gt": parse_iso(buying_date)}})
+if selling_date:
+    conditions.append({"selling_date": {"$lt": parse_iso(selling_date)}})
 for f in info_filters:
     conditions.append({f"info.{f['field']}": {f"${f['operator']}": f["value"]}})
 
@@ -208,9 +222,9 @@ This closes the loop: an employee proposes, the director sees it, the director d
 - [x] One hash keyed by uuid. It gives you write, list, and delete in one call each:
 
 ```python
-redis.hset("orders", order_uuid, json.dumps(order))   # create
-redis.hgetall("orders")                               # pending_orders
-redis.hdel("orders", order_uuid)                      # decision
+redis.hset("orders", order_uuid, json.dumps(order))  # create
+redis.hgetall("orders")  # pending_orders
+redis.hdel("orders", order_uuid)  # decision
 ```
 
 `hgetall` returns bytes for both keys and values, so `key.decode()` and `json.loads(value)`. Store `order_type` (`"BUY"` / `"SELL"`) inside the JSON so `/pending_orders` can shape each entry.
@@ -276,11 +290,13 @@ One endpoint, but it is the PyMongo aggregation showcase.
 pipeline = [
     {"$match": {"selling_date": {"$exists": True}, "selling_price": {"$exists": True}}},
     {"$unwind": "$categories"},
-    {"$group": {
-        "_id": "$categories",
-        "spent":  {"$sum": "$buying_price"},
-        "earned": {"$sum": "$selling_price"},
-    }},
+    {
+        "$group": {
+            "_id": "$categories",
+            "spent": {"$sum": "$buying_price"},
+            "earned": {"$sum": "$selling_price"},
+        }
+    },
     {"$sort": {"earned": -1, "spent": 1, "_id": 1}},
     {"$project": {"_id": 0, "category": "$_id", "spent": 1, "earned": 1}},
 ]
