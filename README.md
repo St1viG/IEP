@@ -82,6 +82,8 @@ them counts in full towards each.
 | [`DEFENSE.md`](DEFENSE.md) | the runbook and demo script for the day, with the reasoning to say out loud |
 | [`MODIFIKACIJE.md`](MODIFIKACIJE.md) | the live-modification playbook, with ready patterns |
 | [`KOMANDE.md`](KOMANDE.md) | one page of every command, for the day itself |
+| [`UPUTSTVO.md`](UPUTSTVO.md) | the same setup as `SETUP.md`, in Serbian and step by step |
+| [`ODBRANA.md`](ODBRANA.md) | the same as `DEFENSE.md`, in Serbian |
 
 ## Running it
 
