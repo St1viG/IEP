@@ -4,6 +4,27 @@ Everything needed to bring the system up on a machine that is not the one it was
 the demo, and answer for the decisions. The long-form reasoning behind every choice is in
 [`ROADMAP.md`](ROADMAP.md); this file is the short version you can follow while someone watches.
 
+## What is actually graded
+
+30 points for the code, +15 for Kubernetes, +15 for the blockchain, capped at 60 —
+and the total is **multiplied by the share of tests still passing after the live
+modification**. The modification is a precondition: without it there are no points at
+all. So the order of priorities on the day is: bring the system up, do the modification,
+and above all do not break the nine endpoints that already work.
+[`MODIFIKACIJE.md`](MODIFIKACIJE.md) is the playbook for that half.
+
+Three rules the assistants enforce, all of which this project already satisfies:
+
+- `/report` must go through the MongoDB aggregation framework. Ours is
+  `$unwind → $group → $sort → $project`.
+- Raw SQL is not allowed, it has to be the ORM. `authentication.py` never builds a
+  SQL string.
+- Filter in the query, not in a Python loop. The single legitimate exception is Redis,
+  which has no query language — say that out loud before you are asked.
+
+**Verified at 179/179 (100%) on the official `iep_grader`**, every level including the
+blockchain one, against a stack built from scratch by `pokreni.sh`.
+
 ## 0. Before you sit down
 
 On the faculty machine, in this order. The first two are the ones that hurt if you skip them.
@@ -28,6 +49,14 @@ again. It takes a few minutes; the four images share one cached pip layer.
 ## 1. Bring the system up
 
 ```bash
+sh pokreni-k8s.sh                 # Windows: pokreni-k8s.cmd
+```
+
+That builds, loads the images into the cluster, applies the manifest, waits on every
+deployment and the migration Job, and opens the port-forwards. The steps by hand:
+
+```bash
+docker compose -f deploy/deployment.yaml build
 sh deploy/load-images.sh          # puts the four local images in the cluster's own store
 kubectl apply -f deploy/k8s.yaml
 kubectl get pods -w               # wait for Running; the migration job goes to Completed
@@ -72,6 +101,7 @@ kubectl port-forward service/ganache-service        8545:8545 &     # only for s
 | `ErrImageNeverPull` | image not in the node's store | run `deploy/load-images.sh` |
 | `ImagePullBackOff` on mysql/mongo/redis/ganache | no network for a first pull | `docker pull` it, then delete the pod |
 | migration job `Completed` but nobody can log in | job ran against a wiped volume and will not re-run | `kubectl delete job migration-job && kubectl apply -f deploy/k8s.yaml` |
+| MongoDB pod restarts, `/search` hangs 30s, `/report` 500s while `/pending_orders` is fine | a mongo 8 image; it refuses to start on kernel 6.19+ (SERVER-121912). The 30s is PyMongo's server-selection timeout | the manifests pin `mongo:7`; check nothing has overridden it |
 | ganache pod slow to be ready | the image is amd64 only, emulated on Apple Silicon | wait 30 s; on an x86 faculty machine it is instant |
 | CoreDNS `CrashLoopBackOff`, pods exit 139 | the cluster was created while the disk was full and its state is corrupt | `docker desktop kubernetes reset-cluster`, then load the images and apply again |
 | `read-only file system` while loading images | Docker's VM is out of disk, so it remounted read-only | free space on the **host**, restart Docker, then `docker builder prune -af` |
@@ -87,6 +117,13 @@ This exact path was run end to end on Docker Desktop Kubernetes v1.36.1: images 
 service restart, the Mongo pod deleted and `/report` still correct, and `employee` at 3/3.
 
 ## 2. The demo
+
+Compose, if Kubernetes is not the thing being shown:
+
+```bash
+sh pokreni.sh                     # Windows: pokreni.cmd
+sh deploy/proveri.sh director /report      # one route, with a token, no curl
+```
 
 The fastest, safest version is the script — it drives every endpoint and a full three-voter ballot,
 and prints an `ok` line per step:

@@ -162,7 +162,12 @@ tests/        pytest suite
 scenario.py   end to end exercise of every endpoint
 ROADMAP.md    the implementation plan, and why each decision was made
 DEFENSE.md    runbook, demo script and the reasoning behind each judgement call
+MODIFIKACIJE.md  the live-modification playbook, with ready aggregation patterns
+pokreni.sh    one command: build, start, and report where everything is listening
+pokreni-k8s.sh  the same on Kubernetes, including the port-forwards
 ```
+
+`.cmd` versions of all three sit next to them, because the defense machines run Windows.
 
 [`ROADMAP.md`](ROADMAP.md) is worth reading alongside the code. It records the reasoning behind the
 design and the traps found along the way, from validation ordering that changes which error a
