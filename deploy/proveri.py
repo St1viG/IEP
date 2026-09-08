@@ -4,8 +4,15 @@ Runs inside one of the project's own images, so the defense machine needs
 nothing but Docker. See deploy/proveri.sh and deploy/proveri.cmd.
 
     proveri.sh director /report
-    proveri.sh employee /search post '{"name": "Ferrari"}'
+    proveri.sh employee /search name=Ferrari
+    proveri.sh employee /create_sell_order selling_price=200 id=6a7c...
     proveri.sh director "/report?from=2020-01-01&to=2030-01-01"
+
+Body fields are given as key=value, which needs no quoting on either shell;
+a value that parses as JSON is sent as JSON, anything else as a string. A whole
+JSON object still works if you prefer it, and is easier to quote on sh:
+
+    proveri.sh employee /search '{"info_filters": [{"field": "a", "operator": "gt", "value": 1}]}'
 """
 
 import json
@@ -53,8 +60,22 @@ def main():
     for argument in sys.argv[3:]:
         if argument.lower() in ("get", "post", "put", "delete"):
             method = argument.lower()
-        else:
+        elif argument.startswith("{"):
             method, body = "post", json.loads(argument)
+        elif "=" in argument:
+            # key=value, so neither cmd nor sh has to survive quoting a JSON
+            # object. cmd does not honour \" escapes at all.
+            name, _, raw = argument.partition("=")
+
+            try:
+                value = json.loads(raw)
+            except ValueError:
+                value = raw
+
+            method = "post"
+            body = {**(body or {}), name: value}
+        else:
+            raise SystemExit(f"ne razumem argument {argument!r}, ocekujem key=value ili JSON")
 
     if service == "director":
         url, account = DIRECTOR, DIRECTOR_ACCOUNT

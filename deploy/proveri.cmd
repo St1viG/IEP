@@ -1,7 +1,7 @@
 @echo off
 REM Provera jedne rute na pokrenutom sistemu (bez curl-a, samo Docker).
 REM   deploy\proveri.cmd director /report
-REM   deploy\proveri.cmd employee /search post "{\"name\": \"Ferrari\"}"
+REM   deploy\proveri.cmd employee /search name=Ferrari
 setlocal
 cd /d "%~dp0.."
 

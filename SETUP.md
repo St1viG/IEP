@@ -65,12 +65,22 @@ you.
 ```cmd
 deploy\proveri.cmd director /report
 deploy\proveri.cmd director /pending_orders
-deploy\proveri.cmd employee /search post "{\"name\": \"Ferrari\"}"
+deploy\proveri.cmd employee /search name=Ferrari
 ```
 
 ```sh
 sh deploy/proveri.sh director /report
-sh deploy/proveri.sh employee /search '{"name": "Ferrari"}'
+sh deploy/proveri.sh employee /search name=Ferrari
+```
+
+A body is given as `key=value` pairs, which needs no quoting on either shell — this matters on
+Windows, where `cmd` does not honour `\"` escapes, so a JSON string typed the Unix way arrives
+mangled. Values that parse as JSON are sent as JSON, so `selling_price=200` is a number and
+`approved=true` is a boolean. A whole JSON object still works where you need nesting, and is easiest
+to quote from `sh`:
+
+```sh
+sh deploy/proveri.sh employee /search '{"info_filters": [{"field": "engine.power", "operator": "gt", "value": 100}]}'
 ```
 
 If you moved the ports, tell it:
@@ -268,6 +278,41 @@ If you changed `models.py`, the migration has to run again against an empty data
 `down -v` first.
 
 ---
+
+## Verifying it on Windows
+
+The scripts were written on macOS and every `.sh` has been run there; the `.cmd` twins have not,
+because there is no Windows here. Run this once on the machine you will defend on, in order. It takes
+about twenty minutes, almost all of it the first build, and it exercises every path you will use.
+
+```cmd
+docker info                                     :: must succeed, else Docker Desktop is not running
+
+pokreni.cmd                                     :: build + start, prints the URLs
+deploy\proveri.cmd director /report              :: -> {"statistics": []}
+deploy\proveri.cmd director /pending_orders      :: -> {"orders": []}
+deploy\proveri.cmd employee /search name=x       :: -> {"assets": []}
+
+docker compose -f deploy/deployment.yaml down
+docker compose -f deploy/development.yaml up -d
+testovi.cmd                                     :: -> 174 passed, and no skips
+
+docker compose -f deploy/development.yaml down
+pokreni-k8s.cmd                                 :: enable Kubernetes in Docker Desktop first
+kubectl get pods                                :: 3 employee pods, migration-job Completed
+deploy\proveri.cmd director /report              :: through the port-forwards
+kubectl delete -f deploy/k8s.yaml
+```
+
+Things that differ on Windows and are worth watching for:
+
+- **Port 5000 is free**, so the defaults are correct — no `AUTHENTICATION_PORT` juggling.
+- `cmd` does not honour `\"` inside quotes, which is why request bodies are `key=value`.
+- Docker Desktop's Kubernetes is the same kind-based cluster as on macOS, so
+  `deploy\load-images.cmd` takes the `desktop-control-plane` path and NodePorts still are not
+  published on the host.
+- If a `.cmd` misbehaves, the `.sh` next to it is the reference for what it should do, and Git Bash
+  will run it unchanged.
 
 ## When something is wrong
 

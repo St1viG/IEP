@@ -18,6 +18,7 @@ docker compose -f deploy/deployment.yaml up -d --build director
 
 # 3. proveri novu rutu:
 sh deploy/proveri.sh director /nova_ruta        # Windows: deploy\proveri.cmd
+sh deploy/proveri.sh director /nova_ruta min=1000   # telo se pise kao key=value
 
 # 4. na kraju: postojeće ponašanje mora ostati netaknuto
 python scenario.py
