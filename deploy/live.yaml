@@ -1,0 +1,33 @@
+# Override za rad uzivo: izvorni fajlovi se montiraju preko onih u slici, pa se
+# izmena vidi posle obicnog `restart`, bez build-a, bez pip-a i bez mreze.
+#
+#   docker compose -f deploy/deployment.yaml -f deploy/live.yaml up -d
+#   ... izmeni src/director.py ...
+#   docker compose -f deploy/deployment.yaml -f deploy/live.yaml restart director
+#
+# Slike i dalje sadrze ceo kod - ovo ga samo privremeno prekriva. Za predaju i za
+# Kubernetes se koristi sam deployment.yaml.
+
+services:
+  authentication:
+    volumes:
+      - ../src/configuration.py:/configuration.py:ro
+      - ../src/models.py:/models.py:ro
+      - ../src/validation.py:/validation.py:ro
+      - ../src/authentication.py:/authentication.py:ro
+
+  employee:
+    volumes:
+      - ../src/configuration.py:/configuration.py:ro
+      - ../src/decorators.py:/decorators.py:ro
+      - ../src/validation.py:/validation.py:ro
+      - ../src/employee.py:/employee.py:ro
+
+  director:
+    volumes:
+      - ../src/configuration.py:/configuration.py:ro
+      - ../src/decorators.py:/decorators.py:ro
+      - ../src/validation.py:/validation.py:ro
+      - ../src/utilities.py:/utilities.py:ro
+      - ../src/director.py:/director.py:ro
+      - ../contracts/output:/contracts/output:ro

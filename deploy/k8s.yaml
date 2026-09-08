@@ -333,6 +333,14 @@ spec:
                 name: investment-fund-secret
           ports:
             - containerPort: 5000
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 3
+            periodSeconds: 2
+      dnsConfig:
+        options:
+          - name: single-request-reopen
 ---
 apiVersion: v1
 kind: Service
@@ -373,6 +381,14 @@ spec:
                 name: investment-fund-secret
           ports:
             - containerPort: 5000
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 3
+            periodSeconds: 2
+      dnsConfig:
+        options:
+          - name: single-request-reopen
 ---
 apiVersion: v1
 kind: Service
@@ -413,6 +429,14 @@ spec:
                 name: investment-fund-secret
           ports:
             - containerPort: 5000
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 3
+            periodSeconds: 2
+      dnsConfig:
+        options:
+          - name: single-request-reopen
 ---
 apiVersion: v1
 kind: Service

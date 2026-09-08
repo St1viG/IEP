@@ -81,6 +81,7 @@ them counts in full towards each.
 | [`ROADMAP.md`](ROADMAP.md) | the implementation plan, and why each decision was made |
 | [`DEFENSE.md`](DEFENSE.md) | the runbook and demo script for the day, with the reasoning to say out loud |
 | [`MODIFIKACIJE.md`](MODIFIKACIJE.md) | the live-modification playbook, with ready patterns |
+| [`KOMANDE.md`](KOMANDE.md) | one page of every command, for the day itself |
 
 ## Running it
 
@@ -91,8 +92,12 @@ repository root. [`SETUP.md`](SETUP.md) covers all of this in far more detail, i
 sh pokreni.sh        # everything, in containers        (Windows: pokreni.cmd)
 sh pokreni-k8s.sh    # everything, on Kubernetes        (Windows: pokreni-k8s.cmd)
 sh testovi.sh        # the 174 tests, in a container    (Windows: testovi.cmd)
+sh oceni.sh          # the official grader              (Windows: oceni.cmd)
 sh deploy/proveri.sh director /report    # one route, with a token
 ```
+
+For a machine with no access to Docker Hub, `spakuj-slike.sh` writes every image this system needs
+into `images/` as `linux/amd64` tars, and `ucitaj-slike.cmd` loads them there.
 
 ### Local development
 

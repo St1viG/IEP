@@ -9,3 +9,7 @@ venv/
 __pycache__/
 *.pyc
 .DS_Store
+grade_report*.json
+
+# Slike za offline prenos: velike, idu na USB, ne u git.
+images/
