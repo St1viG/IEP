@@ -39,10 +39,6 @@ def sell(client, headers, **body):
     return client.post("/create_sell_order", json=body, headers=headers)
 
 
-def decide(client, headers, **body):
-    return client.post("/decision", json=body, headers=headers)
-
-
 def insert_asset(assets, **overrides):
     asset = {
         "name": "Villa Gornji Milanovac",
@@ -143,7 +139,11 @@ def test_an_empty_info_object_is_accepted(employee_client, employee_headers, ord
 
 def test_create_buy_order_needs_an_employee_token(employee_client, director_headers):
     assert buy(employee_client, director_headers).status_code == 401
-    assert employee_client.post("/create_buy_order", json=BUY).status_code == 401
+
+    response = employee_client.post("/create_buy_order", json=BUY)
+
+    assert response.status_code == 401
+    assert response.json == {"msg": "Missing Authorization Header"}
 
 
 # --- create_sell_order -----------------------------------------------------
@@ -207,6 +207,24 @@ def test_a_sell_order_rejects_a_price_that_is_not_a_positive_number(
     )
 
     assert response.json == {"message": "Invalid selling price."}
+
+
+def test_create_sell_order_needs_an_employee_token(employee_client, director_headers, assets):
+    identifier = insert_asset(assets)
+
+    assert (
+        sell(
+            employee_client, director_headers, id=str(identifier), selling_price=150000
+        ).status_code
+        == 401
+    )
+
+    response = employee_client.post(
+        "/create_sell_order", json={"id": str(identifier), "selling_price": 150000}
+    )
+
+    assert response.status_code == 401
+    assert response.json == {"msg": "Missing Authorization Header"}
 
 
 # --- pending_orders --------------------------------------------------------

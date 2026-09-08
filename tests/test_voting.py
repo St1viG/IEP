@@ -116,6 +116,25 @@ def test_a_bad_address_anywhere_in_the_list_is_rejected(
     assert response.json == {"message": "Invalid voter address."}
 
 
+def test_an_address_with_a_broken_checksum_is_rejected(
+    director_client, director_headers, waiting_order, voters, contracts
+):
+    # web3's is_address lets this through, and web3 then refuses the very same
+    # address from inside the deploy. Without the checksum guard in
+    # utilities.valid_address that surfaces as a 500 rather than as the message
+    # the spec asks for.
+    response = decide(
+        director_client,
+        director_headers,
+        uuid=waiting_order,
+        voters=[*voters[:2], "0xAb1111111111111111111111111111111111111a"],
+    )
+
+    assert response.status_code == 400
+    assert response.json == {"message": "Invalid voter address."}
+    assert live_contracts(contracts) == {}
+
+
 def test_the_bad_address_is_reported_before_the_even_count(
     director_client, director_headers, waiting_order, voters
 ):
@@ -150,7 +169,10 @@ def test_decision_needs_a_director_token(director_client, employee_headers):
 
     assert response.status_code == 401
 
-    assert director_client.post("/decision", json={}).status_code == 401
+    unauthorized = director_client.post("/decision", json={})
+
+    assert unauthorized.status_code == 401
+    assert unauthorized.json == {"msg": "Missing Authorization Header"}
 
 
 # --- deployment -------------------------------------------------------------
@@ -412,3 +434,73 @@ def test_the_stored_order_shape_survives_the_round_trip(
     cast(ganache, approve, voters[1])
 
     assert director_service.apply_concluded_votes() == [waiting_order]
+
+
+# --- the contract's own guards, in the spec's words -------------------------
+
+
+def voting_contract(director_service, address):
+    web3 = director_service.utilities.get_web3()
+    abi, _ = director_service.utilities.read_contract()
+
+    return web3.eth.contract(address=address, abi=abi)
+
+
+def refusal(contract, function, sender):
+    """The reason the contract gives for refusing `function` from `sender`.
+
+    Asked with a call rather than a transaction: the revert reason is what the
+    spec names, and a call surfaces it without spending gas or needing the
+    node to keep failed transactions around.
+    """
+
+    try:
+        getattr(contract.functions, function)().call({"from": sender})
+    except Exception as error:  # noqa: BLE001 - the message is the assertion
+        return str(error)
+
+    raise AssertionError(f"{function} from {sender} was not refused")
+
+
+@pytest.fixture
+def open_vote(director_client, director_headers, waiting_order, voters):
+    """A deployed contract with its ballots, still taking votes."""
+
+    return decide(director_client, director_headers, uuid=waiting_order, voters=voters).json
+
+
+def test_an_address_outside_the_voters_list_cannot_vote(
+    director_service, open_vote, ganache, voters
+):
+    contract = voting_contract(director_service, open_vote["approve_transaction"]["to"])
+
+    stranger = ganache.eth.accounts[5]
+
+    assert stranger not in voters
+    assert "Invalid address." in refusal(contract, "vote_approve", stranger)
+    assert "Invalid address." in refusal(contract, "vote_reject", stranger)
+
+
+def test_a_voter_cannot_vote_twice(director_service, open_vote, ganache, voters):
+    cast(ganache, open_vote["approve_transaction"], voters[0])
+
+    contract = voting_contract(director_service, open_vote["approve_transaction"]["to"])
+
+    # Neither again for the same outcome, nor for the other one.
+    assert "Already voted." in refusal(contract, "vote_approve", voters[0])
+    assert "Already voted." in refusal(contract, "vote_reject", voters[0])
+
+
+def test_nobody_can_vote_once_the_majority_has_landed(director_service, open_vote, ganache, voters):
+    cast(ganache, open_vote["approve_transaction"], voters[0])
+    cast(ganache, open_vote["approve_transaction"], voters[1])
+
+    contract = voting_contract(director_service, open_vote["approve_transaction"]["to"])
+
+    # The third voter was allowed and never voted, and is still too late.
+    assert "Voting ended." in refusal(contract, "vote_approve", voters[2])
+
+    # And a stranger hears the same thing rather than "Invalid address.", because
+    # the contract checks `ended` before it checks the address. The spec asks for
+    # every attempt after the conclusion to be refused this way.
+    assert "Voting ended." in refusal(contract, "vote_approve", ganache.eth.accounts[5])

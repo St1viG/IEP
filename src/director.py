@@ -14,7 +14,19 @@ from configuration import Configuration
 from decorators import role_check
 from validation import missing_field, missing_field_message, valid_uuid
 
-POLL_INTERVAL = 3
+POLL_INTERVAL = 1
+
+# "U obracun zarade ulazi samo imovine koje su prodate, odnosno imovina koja ima
+# definisanu cenu prodaje i datum prodaje." The sentence restricts the earnings,
+# not the report, so an asset the fund still holds contributes its buying price
+# to "spent" and nothing to "earned". $type rather than $ifNull, so a price of 0
+# would still count as present.
+SOLD = {
+    "$and": [
+        {"$ne": [{"$type": "$selling_price"}, "missing"]},
+        {"$ne": [{"$type": "$selling_date"}, "missing"]},
+    ]
+}
 
 application = Flask(__name__)
 application.config.from_object(Configuration)
@@ -86,9 +98,22 @@ def apply_concluded_votes():
     for key, value in redis.hgetall(Configuration.REDIS_CONTRACTS).items():
         order_uuid, address = key.decode(), value.decode()
 
-        ended, approved = utilities.voting_status(address)
+        try:
+            # Per contract, not per pass: one unreadable address must not stop
+            # the contracts after it from ever being looked at again.
+            ended, approved = utilities.voting_status(address)
+        except Exception as error:  # noqa: BLE001 - one bad contract, not a bad pass
+            application.logger.warning("contract %s unreadable: %s", address, error)
+            continue
 
         if not ended:
+            continue
+
+        # HDEL answers with the number of fields it removed, so of everyone
+        # racing for this contract exactly one gets a 1. That makes the registry
+        # entry the claim token and everything below it run once per vote, with
+        # the request path and the poller thread both calling in.
+        if redis.hdel(Configuration.REDIS_CONTRACTS, order_uuid) == 0:
             continue
 
         stored = redis.hget(Configuration.REDIS_ORDERS, order_uuid)
@@ -96,13 +121,27 @@ def apply_concluded_votes():
         if approved and stored is not None:
             apply_order(json.loads(stored))
 
-        # Either outcome retires the order and the contract.
+        # Either outcome retires the order.
         redis.hdel(Configuration.REDIS_ORDERS, order_uuid)
-        redis.hdel(Configuration.REDIS_CONTRACTS, order_uuid)
 
         settled.append(order_uuid)
 
     return settled
+
+
+def settle():
+    """apply_concluded_votes for the request path, where a failure is not fatal.
+
+    A vote concludes without this service being told, so the director's own two
+    read endpoints settle before they answer rather than waiting for the next
+    poll. If the chain is unreachable the answer is merely a second stale, which
+    is a far better failure than a 500 on /report.
+    """
+
+    try:
+        apply_concluded_votes()
+    except Exception as error:  # noqa: BLE001 - a stale read beats a failed one
+        application.logger.warning("settle failed: %s", error)
 
 
 def poll_votes(interval=POLL_INTERVAL):
@@ -125,6 +164,8 @@ def start_poller(interval=POLL_INTERVAL):
 @application.route("/pending_orders", methods=["GET"])
 @role_check("director")
 def pending_orders():
+    settle()
+
     stored = redis.hgetall(Configuration.REDIS_ORDERS)
 
     return jsonify(orders=[shape(key.decode(), json.loads(value)) for key, value in stored.items()])
@@ -179,14 +220,17 @@ def decision():
 @application.route("/report", methods=["GET"])
 @role_check("director")
 def report():
+    settle()
+
     pipeline = [
-        {"$match": {"selling_date": {"$exists": True}, "selling_price": {"$exists": True}}},
         {"$unwind": "$categories"},
         {
             "$group": {
                 "_id": "$categories",
+                # Every asset was bought, so every asset counts here. Only the
+                # sold ones earned anything, which is what SOLD gates.
                 "spent": {"$sum": "$buying_price"},
-                "earned": {"$sum": "$selling_price"},
+                "earned": {"$sum": {"$cond": [SOLD, "$selling_price", 0]}},
             }
         },
         {"$sort": {"earned": -1, "spent": 1, "_id": 1}},

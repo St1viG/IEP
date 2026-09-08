@@ -17,6 +17,27 @@ def build_headers(application, roles, email="onlymoney@gmail.com"):
     return {"Authorization": f"Bearer {token}"}
 
 
+# Probing once per service rather than once per test. Each probe costs a full
+# connection timeout when the service is down, and there are 140 tests behind
+# these gates, so without memoising, learning that development.yaml is not
+# running takes nine minutes instead of five seconds.
+_unreachable = {}
+
+
+def _gate(name, probe):
+    """Run `probe` once. Every later call re-raises the same skip immediately."""
+
+    if name in _unreachable:
+        pytest.skip(_unreachable[name])
+
+    try:
+        return probe()
+    except Exception as error:
+        _unreachable[name] = f"{name} is not reachable, start development.yaml first: {error}"
+
+        pytest.skip(_unreachable[name])
+
+
 def testing_database_uri():
     from sqlalchemy_utils import create_database, database_exists
 
@@ -25,13 +46,13 @@ def testing_database_uri():
         f"@{configuration.Configuration.DATABASE_URL}/{configuration.Configuration.DATABASE_NAME}_test"
     )
 
-    try:
+    def probe():
         if not database_exists(uri):
             create_database(uri)
-    except Exception as error:
-        pytest.skip(f"MySQL is not reachable, start development.yaml first: {error}")
 
-    return uri
+        return uri
+
+    return _gate("MySQL", probe)
 
 
 @pytest.fixture
@@ -92,9 +113,7 @@ def require_mongo():
     )
 
     try:
-        probe.admin.command("ping")
-    except Exception as error:
-        pytest.skip(f"MongoDB is not reachable, start development.yaml first: {error}")
+        _gate("MongoDB", lambda: probe.admin.command("ping"))
     finally:
         probe.close()
 
@@ -109,9 +128,7 @@ def require_redis():
     )
 
     try:
-        probe.ping()
-    except Exception as error:
-        pytest.skip(f"Redis is not reachable, start development.yaml first: {error}")
+        _gate("Redis", probe.ping)
     finally:
         probe.close()
 
@@ -123,13 +140,13 @@ def require_ganache():
         HTTPProvider(configuration.Configuration.BLOCKCHAIN_URL, request_kwargs={"timeout": 10})
     )
 
-    try:
+    def probe():
         if not web3.is_connected():
             raise RuntimeError("no response")
-    except Exception as error:
-        pytest.skip(f"ganache is not reachable, start development.yaml first: {error}")
 
-    return web3
+        return web3
+
+    return _gate("ganache", probe)
 
 
 @pytest.fixture

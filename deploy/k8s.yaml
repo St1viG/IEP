@@ -116,6 +116,10 @@ spec:
       containers:
         - name: mysql
           image: mysql
+          # No tag means Kubernetes would default to Always and insist on
+          # reaching Docker Hub on every pod start. A node that already has the
+          # image should not need the network to bring the system up.
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: investment-fund-config
@@ -172,6 +176,7 @@ spec:
       containers:
         - name: mongo
           image: mongo
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: investment-fund-config
@@ -217,6 +222,7 @@ spec:
       containers:
         - name: redis
           image: redis
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 6379
 ---
@@ -250,6 +256,7 @@ spec:
       containers:
         - name: ganache
           image: trufflesuite/ganache-cli
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8545
 ---

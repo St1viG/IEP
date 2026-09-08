@@ -16,4 +16,4 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["configuration", "decorators", "models", "validation"]
+known-first-party = ["configuration", "decorators", "models", "utilities", "validation"]

@@ -106,6 +106,7 @@ Published on `5000`, `5001` and `5002` by default; override with `AUTHENTICATION
 
 ```bash
 docker compose -f deploy/deployment.yaml build   # the four images must exist locally
+sh deploy/load-images.sh                         # put them in the cluster's own image store
 kubectl apply -f deploy/k8s.yaml
 ```
 
@@ -114,8 +115,10 @@ JWT signing key in a `Secret`, persistent volumes for both databases, a migratio
 the initial director, and the employee service at three replicas.
 
 Images are consumed with `imagePullPolicy: Never`, so a cluster with its own image store (kind, k3d,
-Docker Desktop's Kubernetes) needs them imported first. See
-[`ROADMAP.md`](ROADMAP.md#54-done-when) for the exact command and other cluster specific notes.
+Docker Desktop's Kubernetes) needs them imported first, which is what `deploy/load-images.sh` does
+for each of those clusters in turn. [`DEFENSE.md`](DEFENSE.md) is the runbook for bringing the whole
+thing up on a machine it was not built on, and [`ROADMAP.md`](ROADMAP.md#54-done-when) has the
+cluster specific notes behind it.
 
 ### The contract
 
@@ -131,7 +134,7 @@ which is ganache 6 and rejects the `PUSH0` opcode that current `solc` emits by d
 ## Tests
 
 ```bash
-python -m pytest                      # 167 tests, needs deploy/development.yaml running
+python -m pytest                      # 172 tests, needs deploy/development.yaml running
 python -m pytest -m "not integration" # only the tests that need no services
 ```
 
@@ -158,6 +161,7 @@ deploy/       one dockerfile per service, both compose files, and k8s.yaml
 tests/        pytest suite
 scenario.py   end to end exercise of every endpoint
 ROADMAP.md    the implementation plan, and why each decision was made
+DEFENSE.md    runbook, demo script and the reasoning behind each judgement call
 ```
 
 [`ROADMAP.md`](ROADMAP.md) is worth reading alongside the code. It records the reasoning behind the

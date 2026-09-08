@@ -1,0 +1,15 @@
+# The build context is the repository root, and every dockerfile names the files
+# it wants one by one, so nothing below would end up in an image anyway. It is
+# here because the context itself is sent to the daemon four times per build,
+# and venv/ plus docs/ make that hundreds of megabytes of nothing.
+venv/
+docs/
+tests/
+.git/
+.github/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+scenario.py

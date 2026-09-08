@@ -81,7 +81,28 @@ def search(token, **body):
     return response.json()["assets"]
 
 
-VOTERS = web3.eth.accounts[1:4]
+def wait_for_ganache(attempts=40):
+    """The accounts, once the simulator will talk to us.
+
+    The image the assignment mandates is amd64 only, so on an arm host it runs
+    emulated and takes the better part of half a minute to accept its first
+    connection. Reading the accounts straight away resets the connection and
+    the script dies before printing a single line.
+    """
+
+    for remaining in range(attempts, 0, -1):
+        try:
+            return web3.eth.accounts
+        except Exception:  # noqa: BLE001 - anything here means "not up yet"
+            if remaining == 1:
+                raise
+
+            time.sleep(3)
+
+    return []
+
+
+VOTERS = wait_for_ganache()[1:4]
 
 
 # --- accounts --------------------------------------------------------------

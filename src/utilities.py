@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from eth_utils import is_checksum_formatted_address
 from web3 import HTTPProvider, Web3
 
 from configuration import Configuration
@@ -41,7 +42,12 @@ def deploy_voting(voters):
 
     factory = web3.eth.contract(abi=abi, bytecode=bytecode)
 
-    transaction = factory.constructor(voters).transact({"from": web3.eth.accounts[0]})
+    # Checksummed on the way in: web3 encodes an address argument only in its
+    # canonical form, and valid_address has already ruled out anything that
+    # cannot be converted.
+    addresses = [Web3.to_checksum_address(voter) for voter in voters]
+
+    transaction = factory.constructor(addresses).transact({"from": web3.eth.accounts[0]})
     receipt = web3.eth.wait_for_transaction_receipt(transaction)
 
     return receipt["contractAddress"]
@@ -84,4 +90,11 @@ def voting_status(address):
 
 
 def valid_address(value):
-    return isinstance(value, str) and Web3.is_address(value)
+    if not isinstance(value, str) or not Web3.is_address(value):
+        return False
+
+    # is_address lets a mixed case address through whatever its EIP-55 checksum
+    # says, but web3 refuses that same address again from deep inside the deploy
+    # and the failure would surface as a 500. Reject it here, where the spec
+    # still has "Invalid voter address." to answer with.
+    return not is_checksum_formatted_address(value) or Web3.is_checksum_address(value)

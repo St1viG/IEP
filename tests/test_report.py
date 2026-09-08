@@ -29,10 +29,14 @@ def statistics(client, headers):
     return response.json["statistics"]
 
 
-def test_a_fund_that_sold_nothing_reports_nothing(assets, director_client, director_headers):
+def test_a_fund_that_sold_nothing_still_reports_what_it_spent(
+    assets, director_client, director_headers
+):
     assets.insert_one(asset("Zastava 101", ["vehicles"], 500))
 
-    assert statistics(director_client, director_headers) == []
+    assert statistics(director_client, director_headers) == [
+        {"category": "vehicles", "spent": 500, "earned": 0}
+    ]
 
 
 def test_an_empty_collection_reports_nothing(director_client, director_headers):
@@ -71,26 +75,31 @@ def test_prices_within_a_category_add_up(assets, director_client, director_heade
     ]
 
 
-def test_an_unsold_asset_contributes_to_neither_column(assets, director_client, director_headers):
+def test_an_unsold_asset_contributes_to_spent_only(assets, director_client, director_headers):
     assets.insert_many(
         [asset("Villa", ["real estate"], 100000, 150000), asset("Cottage", ["real estate"], 20000)]
     )
 
-    # Reading A of the spec: the whole report covers sold assets only, so the
-    # cottage's 20000 stays out of "spent" as well.
+    # "U obracun zarade ulazi samo imovine koje su prodate" restricts the
+    # earnings, not the report, so the cottage the fund still holds shows up in
+    # "spent" and adds nothing to "earned".
     assert statistics(director_client, director_headers) == [
-        {"category": "real estate", "spent": 100000, "earned": 150000}
+        {"category": "real estate", "spent": 120000, "earned": 150000}
     ]
 
 
-def test_a_half_sold_asset_is_excluded(assets, director_client, director_headers):
+def test_a_half_sold_asset_earns_nothing(assets, director_client, director_headers):
     document = asset("Villa", ["real estate"], 100000, 150000)
 
     del document["selling_date"]
 
     assets.insert_one(document)
 
-    assert statistics(director_client, director_headers) == []
+    # The spec calls an asset sold when it has both a selling price and a
+    # selling date, so one without the other is not sold and cannot have earned.
+    assert statistics(director_client, director_headers) == [
+        {"category": "real estate", "spent": 100000, "earned": 0}
+    ]
 
 
 def test_the_three_sort_keys_are_applied_in_order(assets, director_client, director_headers):
@@ -99,7 +108,7 @@ def test_the_three_sort_keys_are_applied_in_order(assets, director_client, direc
             asset("A", ["alpha"], 100, 500),
             asset("B", ["beta"], 200, 500),
             asset("C", ["gamma", "delta"], 50, 50),
-            asset("D", ["alpha"], 999),
+            asset("D", ["epsilon"], 999),
         ]
     )
 
@@ -109,6 +118,7 @@ def test_the_three_sort_keys_are_applied_in_order(assets, director_client, direc
         {"category": "beta", "spent": 200, "earned": 500},  # ties on earned, loses on spent
         {"category": "delta", "spent": 50, "earned": 50},
         {"category": "gamma", "spent": 50, "earned": 50},  # ties on both, loses on name
+        {"category": "epsilon", "spent": 999, "earned": 0},  # unsold, so it sorts last
     ]
 
 
