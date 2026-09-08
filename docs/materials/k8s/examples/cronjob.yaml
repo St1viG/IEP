@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: timestamp-logger
+spec:
+  schedule: "*/1 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: logger
+              image: busybox:1.36
+              command:
+                - sh
+                - -c
+                - |
+                  echo "CronJob started at $(date)"
+                  echo "This simulates a scheduled cleanup, backup, or report task."

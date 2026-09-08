@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: employees-migration-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: employees-migration
+        image: employees-migration:k8s
+        env:
+        - name: DATABASE_URL
+          value: "mysql-service"
+      restartPolicy: Never
+  backoffLimit: 4

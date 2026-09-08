@@ -1,0 +1,154 @@
+---
+# Step 1: Seed the same pgbench schema on the primary
+# Replicas receive this data automatically via WAL streaming
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-data
+  namespace: db-replication
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-primary
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              until pg_isready -h postgres-write.db-replication.svc.cluster.local -p 5432; do
+                echo "waiting for primary..."
+                sleep 2
+              done
+        - name: wait-for-replicas
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              until pg_isready -h postgres-read.db-replication.svc.cluster.local -p 5432; do
+                echo "waiting for replicas..."
+                sleep 2
+              done
+      containers:
+        - name: seed
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              echo "=== Seeding pgbench schema on primary (scale 20 = 200k rows) ==="
+              pgbench -h postgres-write.db-replication.svc.cluster.local \
+                      -U app -i -s 20 appdb
+
+              echo ""
+              echo "Data written to primary. Replicas will sync via WAL streaming."
+              echo "Wait ~5 seconds before running the benchmark."
+---
+# Step 2: Benchmark reads — traffic splits across all replica pods
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: read-benchmark
+  namespace: db-replication
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: benchmark
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              READ_HOST=postgres-read.db-replication.svc.cluster.local
+
+              echo "============================================"
+              echo " AFTER REPLICATION"
+              echo " Target : postgres-read (2 replica pods)"
+              echo " Clients: 20 concurrent readers"
+              echo " Mode   : SELECT-only (-S), 60 seconds"
+              echo "============================================"
+
+              pgbench -h $READ_HOST -U app \
+                      -c 20 -j 4 -T 60 \
+                      -S --no-vacuum \
+                      --report-per-command \
+                      appdb
+
+              echo ""
+              echo "Kubernetes distributed the 20 clients across 2 replica pods."
+              echo "Scale reads further: kubectl scale statefulset postgres-replica --replicas=4 -n db-replication"
+---
+# Step 3: Verify write/read separation is working correctly
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: verify-replication
+  namespace: db-replication
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: verify
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              WRITE=postgres-write.db-replication.svc.cluster.local
+              READ=postgres-read.db-replication.svc.cluster.local
+
+              echo "=== Checking server roles ==="
+              echo -n "postgres-write is primary?  "
+              psql -h $WRITE -U app appdb -tAc "SELECT CASE WHEN pg_is_in_recovery() THEN 'NO (replica)' ELSE 'YES (primary)' END;"
+
+              echo -n "postgres-read  is replica?  "
+              psql -h $READ  -U app appdb -tAc "SELECT CASE WHEN pg_is_in_recovery() THEN 'YES (replica)' ELSE 'NO (primary)' END;"
+
+              echo ""
+              echo "=== Checking replication lag on primary ==="
+              psql -h $WRITE -U app appdb -c "SELECT client_addr, state, sent_lsn, write_lsn, replay_lsn, sync_state FROM pg_stat_replication;"
+
+              echo ""
+              echo "=== Write to primary, read from replica ==="
+              psql -h $WRITE -U app appdb -c "CREATE TABLE IF NOT EXISTS replication_test (msg TEXT, ts TIMESTAMPTZ DEFAULT now());"
+              psql -h $WRITE -U app appdb -c "INSERT INTO replication_test(msg) VALUES ('written to primary');"
+
+              sleep 1  # allow WAL to propagate
+
+              echo -n "Row visible on replica: "
+              psql -h $READ -U app appdb -tAc "SELECT msg FROM replication_test LIMIT 1;"

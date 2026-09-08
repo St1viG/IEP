@@ -1,0 +1,30 @@
+[
+  {
+    "_id": { "$oid": "661111111111111111111111" },
+    "name": "Alice Johnson",
+    "email": "alice@example.com",
+    "city": "Belgrade",
+    "joined_at": { "$date": "2024-01-15T10:00:00Z" }
+  },
+  {
+    "_id": { "$oid": "661111111111111111111112" },
+    "name": "Bob Smith",
+    "email": "bob@example.com",
+    "city": "Novi Sad",
+    "joined_at": { "$date": "2024-02-20T11:30:00Z" }
+  },
+  {
+    "_id": { "$oid": "661111111111111111111113" },
+    "name": "Charlie Brown",
+    "email": "charlie@example.com",
+    "city": "Niš",
+    "joined_at": { "$date": "2024-03-05T09:15:00Z" }
+  },
+  {
+    "_id": { "$oid": "661111111111111111111114" },
+    "name": "Diana Petrovic",
+    "email": "diana@example.com",
+    "city": "Kragujevac",
+    "joined_at": { "$date": "2024-04-01T14:45:00Z" }
+  }
+]

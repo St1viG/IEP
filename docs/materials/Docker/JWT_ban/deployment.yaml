@@ -1,0 +1,71 @@
+version: "3"
+services:
+  database:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+    ports:
+      - 3306:3306
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+    networks:
+      - adminer_database_network
+      - database_network
+
+  adminer:
+    image: adminer
+    ports:
+      - 8080:8080
+    networks:
+      - adminer_database_network
+
+  redis:
+    image: redis
+    ports:
+      - 6379:6379
+    networks:
+      - redis_network
+
+  user:
+    image: user
+    ports:
+      - 5000:5000
+    environment:
+      - PRODUCTION=True
+      - DATABASE_URL=database
+      - DATABASE_USERNAME=root
+      - DATABASE_PASSWORD=root
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=channel
+      - REDIS_BUFFER=banned
+    networks:
+      - redis_network
+      - database_network
+    deploy:
+      replicas: 3
+
+  admin:
+    image: admin
+    ports:
+      - 5001:5000
+    environment:
+      - PRODUCTION=True
+      - DATABASE_URL=database
+      - DATABASE_USERNAME=root
+      - DATABASE_PASSWORD=root
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_CHANNEL=channel
+      - REDIS_BUFFER=banned
+    networks:
+      - redis_network
+      - database_network
+
+networks:
+  adminer_database_network:
+    driver: overlay
+  database_network:
+    driver: overlay
+  redis_network:
+    driver: overlay

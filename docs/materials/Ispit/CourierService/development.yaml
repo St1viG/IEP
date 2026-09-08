@@ -1,0 +1,22 @@
+version: "3"
+
+services:
+  database:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=database
+    ports:
+      - 3306:3306
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+
+  adminer:
+    image: adminer
+    ports:
+      - 8080:8080
+
+  ganache-cli:
+    image: trufflesuite/ganache-cli
+    ports:
+      - 8545:8545

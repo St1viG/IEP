@@ -1,3 +1,8 @@
+# docs/ holds the course materials and the assignment. They are reference, not
+# our code: ruff must not restyle them and the whitespace hooks must not touch
+# them, or the thing we compare against stops being what the professor wrote.
+exclude: ^docs/
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.2

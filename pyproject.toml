@@ -2,6 +2,9 @@
 line-length = 100
 target-version = "py313"
 
+# The course materials are reference, not our code.
+extend-exclude = ["docs"]
+
 [tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors

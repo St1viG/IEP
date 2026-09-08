@@ -1,0 +1,346 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: db-replication
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: db-replication
+data:
+  # ---------------------------------------------------------------
+  # Primary postgresql.conf — enables WAL streaming replication
+  # ---------------------------------------------------------------
+  postgresql.conf: |
+    listen_addresses = '*'
+    port = 5432
+
+    # Replication
+    wal_level = replica          # minimum required for streaming replication
+    max_wal_senders = 10         # max concurrent replica connections
+    wal_keep_size = 256          # keep 256 MB of WAL segments for lagging replicas
+    hot_standby = on             # allow read queries on standby (no-op on primary)
+
+    # Performance
+    max_connections = 200
+    shared_buffers = 128MB
+    effective_cache_size = 256MB
+
+  # ---------------------------------------------------------------
+  # pg_hba.conf — who can connect and how
+  # Applies to both primary and replicas (same file mounted in both)
+  # ---------------------------------------------------------------
+  pg_hba.conf: |
+    # TYPE  DATABASE    USER        ADDRESS         METHOD
+    local   all         all                         trust
+    host    all         all         0.0.0.0/0       md5
+    host    replication replicator  0.0.0.0/0       md5
+
+  # ---------------------------------------------------------------
+  # Init script: runs once on the primary after initdb
+  # Creates the dedicated replication role used by replicas
+  # ---------------------------------------------------------------
+  init-primary.sh: |
+    #!/bin/bash
+    set -e
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '$REPLICATION_PASSWORD';
+    EOSQL
+
+    echo "Replication user 'replicator' created."
+
+  # ---------------------------------------------------------------
+  # Init script for replica init-container
+  # Clones primary via pg_basebackup; skipped on pod restart if
+  # PGDATA already exists (idempotent guard via PG_VERSION file)
+  # ---------------------------------------------------------------
+  clone-primary.sh: |
+    #!/bin/bash
+    set -e
+
+    PRIMARY=postgres-primary-0.postgres-primary-headless.db-replication.svc.cluster.local
+
+    if [ -f "$PGDATA/PG_VERSION" ]; then
+      echo "PGDATA already initialised — skipping clone."
+      exit 0
+    fi
+
+    echo "Waiting for primary to accept replication connections..."
+    until PGPASSWORD="$REPLICATION_PASSWORD" \
+          psql -h "$PRIMARY" -U replicator -d postgres -c "SELECT 1" &>/dev/null; do
+      sleep 2
+    done
+
+    echo "Cloning primary with pg_basebackup..."
+    PGPASSWORD="$REPLICATION_PASSWORD" \
+    pg_basebackup \
+      -h "$PRIMARY" \
+      -U replicator \
+      -D "$PGDATA" \
+      -P -Xs -R
+    # -R writes standby.signal + primary_conninfo automatically (PostgreSQL 12+)
+
+    echo "Clone complete. This pod will start as a hot-standby replica."
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: db-replication
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "demo-password-123"
+  REPLICATION_PASSWORD: "repl-password-456"
+---
+# Headless service gives each primary pod a stable DNS name:
+#   postgres-primary-0.postgres-primary-headless.db-replication.svc.cluster.local
+# Replicas use this address in their pg_basebackup clone command.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-primary-headless
+  namespace: db-replication
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-primary
+  ports:
+    - port: 5432
+      name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-primary
+  namespace: db-replication
+spec:
+  serviceName: postgres-primary-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-primary
+  template:
+    metadata:
+      labels:
+        app: postgres-primary
+        role: primary
+    spec:
+      # fsGroup ensures the mounted PVC is owned by the postgres group (GID 999)
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16
+          args:
+            - postgres
+            - -c
+            - config_file=/etc/postgresql/postgresql.conf
+            - -c
+            - hba_file=/etc/postgresql/pg_hba.conf
+          env:
+            - name: POSTGRES_USER
+              value: app
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: appdb
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: REPLICATION_PASSWORD
+          ports:
+            - containerPort: 5432
+              name: postgres
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: postgresql.conf
+            - name: postgres-config
+              mountPath: /etc/postgresql/pg_hba.conf
+              subPath: pg_hba.conf
+            - name: postgres-config
+              mountPath: /docker-entrypoint-initdb.d/init-primary.sh
+              subPath: init-primary.sh
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "app", "-d", "appdb"]
+            initialDelaySeconds: 15
+            periodSeconds: 5
+      volumes:
+        - name: postgres-config
+          configMap:
+            name: postgres-config
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+# Headless service for replica pod DNS
+# Each replica gets a stable name:
+#   postgres-replica-0.postgres-replica-headless.db-replication.svc.cluster.local
+#   postgres-replica-1.postgres-replica-headless.db-replication.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-replica-headless
+  namespace: db-replication
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-replica
+  ports:
+    - port: 5432
+      name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-replica
+  namespace: db-replication
+spec:
+  serviceName: postgres-replica-headless
+  replicas: 2          # scale this number to add more read capacity
+  selector:
+    matchLabels:
+      app: postgres-replica
+  template:
+    metadata:
+      labels:
+        app: postgres-replica
+        role: replica
+    spec:
+      securityContext:
+        fsGroup: 999
+      initContainers:
+        # Clones the primary once; skipped on pod restarts when PGDATA exists
+        - name: clone-primary
+          image: postgres:16
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: REPLICATION_PASSWORD
+          command:
+            - bash
+            - /scripts/clone-primary.sh
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-config
+              mountPath: /scripts/clone-primary.sh
+              subPath: clone-primary.sh
+      containers:
+        - name: postgres
+          image: postgres:16
+          args:
+            - postgres
+            - -c
+            - config_file=/etc/postgresql/postgresql.conf
+            - -c
+            - hba_file=/etc/postgresql/pg_hba.conf
+          env:
+            - name: POSTGRES_USER
+              value: app
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: appdb
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-config
+              mountPath: /etc/postgresql/postgresql.conf
+              subPath: postgresql.conf
+            - name: postgres-config
+              mountPath: /etc/postgresql/pg_hba.conf
+              subPath: pg_hba.conf
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "app", "-d", "appdb"]
+            initialDelaySeconds: 20
+            periodSeconds: 5
+      volumes:
+        - name: postgres-config
+          configMap:
+            name: postgres-config
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+# WRITE SERVICE — points exclusively to the primary pod
+# All INSERT / UPDATE / DELETE must go through this service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-write
+  namespace: db-replication
+spec:
+  selector:
+    app: postgres-primary
+    role: primary
+  ports:
+    - port: 5432
+      name: postgres
+---
+# READ SERVICE — load-balanced across ALL replica pods
+# Kubernetes round-robins connections across replica-0, replica-1, ...
+# Add more replicas to the StatefulSet to scale read throughput linearly.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-read
+  namespace: db-replication
+spec:
+  selector:
+    app: postgres-replica
+    role: replica
+  ports:
+    - port: 5432
+      name: postgres

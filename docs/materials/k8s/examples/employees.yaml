@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql
+  labels:
+    name: mysql-pod
+spec:
+  containers:
+  - name: mysql
+    image: mysql
+    ports:
+    - containerPort: 3306
+    env:
+    - name: MYSQL_ROOT_PASSWORD
+      value: "root"
+    - name: MYSQL_DATABASE
+      value: "employees"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+spec:
+  type: ClusterIP
+  selector:
+    name: mysql-pod
+  ports:
+    - protocol: TCP
+      port: 3306
+      targetPort: 3306
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: adminer
+  labels:
+    name: adminer-pod
+spec:
+  containers:
+  - name: adminer
+    image: adminer
+    ports:
+    - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adminer-service
+spec:
+  type: NodePort
+  selector:
+    name: adminer-pod
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: employees-application-deployment
+  labels:
+    name: employees-application-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      name: employees-application-pod
+  template:
+    metadata:
+      labels:
+        name: employees-application-pod
+    spec:
+      containers:
+      - name: employees-application
+        image: employees-application:k8s
+        ports:
+        - containerPort: 5000
+        env:
+        - name: DATABASE_URL
+          value: "mysql-service"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: employees-application-service
+spec:
+  type: NodePort
+  selector:
+    name: employees-application-pod
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 5000
+      nodePort: 30001

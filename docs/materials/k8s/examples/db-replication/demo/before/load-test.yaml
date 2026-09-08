@@ -1,0 +1,87 @@
+---
+# Step 1: Seed the pgbench schema so the benchmark has data to read
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-data
+  namespace: db-before
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-db
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              until pg_isready -h postgres.db-before.svc.cluster.local -p 5432; do
+                echo "waiting for postgres..."
+                sleep 2
+              done
+      containers:
+        - name: seed
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              echo "=== Creating pgbench schema (scale 20 = 200k rows) ==="
+              pgbench -h postgres.db-before.svc.cluster.local \
+                      -U app -i -s 20 appdb
+              echo "Seed complete."
+---
+# Step 2: Simulate concurrent read load against the single instance
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: read-benchmark
+  namespace: db-before
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: benchmark
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              HOST=postgres.db-before.svc.cluster.local
+
+              echo "============================================"
+              echo " BEFORE REPLICATION"
+              echo " Target : single postgres instance"
+              echo " Clients: 20 concurrent readers"
+              echo " Mode   : SELECT-only (-S), 60 seconds"
+              echo "============================================"
+
+              pgbench -h $HOST -U app \
+                      -c 20 -j 4 -T 60 \
+                      -S --no-vacuum \
+                      --report-per-command \
+                      appdb
+
+              echo ""
+              echo "All 20 clients competed for ONE instance."
+              echo "Scaling reads = buying a bigger machine (vertical)."

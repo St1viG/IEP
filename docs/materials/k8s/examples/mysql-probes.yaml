@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-probe-secret
+type: Opaque
+stringData:
+  MYSQL_ROOT_PASSWORD: root
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql-probes
+  labels:
+    app: mysql-probes
+spec:
+  containers:
+    - name: mysql
+      image: mysql:8
+      env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-probe-secret
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          value: employees
+      ports:
+        - containerPort: 3306
+      readinessProbe:
+        exec:
+          command:
+            - sh
+            - -c
+            - mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD"
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        timeoutSeconds: 3
+      livenessProbe:
+        exec:
+          command:
+            - sh
+            - -c
+            - mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD"
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-probes
+spec:
+  selector:
+    app: mysql-probes
+  ports:
+    - port: 3306
+      targetPort: 3306

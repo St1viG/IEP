@@ -1,0 +1,51 @@
+version: "3"
+
+services:
+  database:
+    image: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=database
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+
+  ganache-cli:
+    image: trufflesuite/ganache-cli
+    ports:
+      - 8545:8545
+
+  authentication:
+    image: authentication
+    environment:
+      - PRODUCTION=True
+      - DATABASE_USERNAME=root
+      - DATABASE_PASSWORD=root
+      - DATABASE_URL=database
+      - DATABASE_NAME=ether_bank_database
+      - BLOCKCHAIN_URL=http://ganache-cli:8545
+    ports:
+      - 5000:5000
+
+  administrator:
+    image: administrator
+    environment:
+      - PRODUCTION=True
+      - DATABASE_USERNAME=root
+      - DATABASE_PASSWORD=root
+      - DATABASE_URL=database
+      - DATABASE_NAME=ether_bank_database
+      - BLOCKCHAIN_URL=http://ganache-cli:8545
+    ports:
+      - 5001:5000
+
+  user:
+    image: user
+    environment:
+      - PRODUCTION=True
+      - DATABASE_USERNAME=root
+      - DATABASE_PASSWORD=root
+      - DATABASE_URL=database
+      - DATABASE_NAME=ether_bank_database
+      - BLOCKCHAIN_URL=http://ganache-cli:8545
+    ports:
+      - 5002:5000

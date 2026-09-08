@@ -1,0 +1,42 @@
+[
+  {
+    "_id": { "$oid": "662222222222222222222221" },
+    "name": "Flask T-Shirt",
+    "category": "Apparel",
+    "price": 20,
+    "stock": 100,
+    "tags": ["flask", "python", "shirt"]
+  },
+  {
+    "_id": { "$oid": "662222222222222222222222" },
+    "name": "MongoDB Mug",
+    "category": "Accessories",
+    "price": 12,
+    "stock": 80,
+    "tags": ["mongodb", "mug"]
+  },
+  {
+    "_id": { "$oid": "662222222222222222222223" },
+    "name": "Python Sticker Pack",
+    "category": "Accessories",
+    "price": 5,
+    "stock": 200,
+    "tags": ["python", "stickers"]
+  },
+  {
+    "_id": { "$oid": "662222222222222222222224" },
+    "name": "Backend Book",
+    "category": "Books",
+    "price": 35,
+    "stock": 50,
+    "tags": ["backend", "flask", "mongodb"]
+  },
+  {
+    "_id": { "$oid": "662222222222222222222225" },
+    "name": "Docker for Devs",
+    "category": "Books",
+    "price": 28,
+    "stock": 60,
+    "tags": ["docker", "devops"]
+  }
+]
