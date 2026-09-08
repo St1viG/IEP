@@ -72,9 +72,27 @@ free-form `info` object, for example `{"field": "engine.power", "operator": "gt"
 `/report` uses an aggregation pipeline that unwinds categories, so an asset belonging to several of
 them counts in full towards each.
 
+## Documentation
+
+| | |
+|---|---|
+| [`SETUP.md`](SETUP.md) | how to install, run and test it, on Windows and on Unix, and what to do when it breaks |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | every file, every data shape, every request path, in depth |
+| [`ROADMAP.md`](ROADMAP.md) | the implementation plan, and why each decision was made |
+| [`DEFENSE.md`](DEFENSE.md) | the runbook and demo script for the day, with the reasoning to say out loud |
+| [`MODIFIKACIJE.md`](MODIFIKACIJE.md) | the live-modification playbook, with ready patterns |
+
 ## Running it
 
-Requires Docker and Python 3.13 or newer. All commands run from the repository root.
+Docker is the only requirement; Python on the host is optional. All commands run from the
+repository root. [`SETUP.md`](SETUP.md) covers all of this in far more detail, including Windows.
+
+```sh
+sh pokreni.sh        # everything, in containers        (Windows: pokreni.cmd)
+sh pokreni-k8s.sh    # everything, on Kubernetes        (Windows: pokreni-k8s.cmd)
+sh testovi.sh        # the 174 tests, in a container    (Windows: testovi.cmd)
+sh deploy/proveri.sh director /report    # one route, with a token
+```
 
 ### Local development
 
@@ -157,7 +175,7 @@ resetting anything.
 ```
 src/          the three services, the migration job, and their shared modules
 contracts/    voting.sol and its compiled abi and bytecode
-deploy/       one dockerfile per service, both compose files, and k8s.yaml
+deploy/       one dockerfile per service, both compose files, k8s.yaml and the helper scripts
 tests/        pytest suite
 scenario.py   end to end exercise of every endpoint
 ROADMAP.md    the implementation plan, and why each decision was made

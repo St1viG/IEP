@@ -1,3 +1,9 @@
+"""The relational half of the system: users, roles, and the join between them.
+
+Only the authentication service and the migration job import this. Neither the
+employee nor the director service speaks SQL at all.
+"""
+
 from flask_sqlalchemy import SQLAlchemy
 
 database = SQLAlchemy()

@@ -1,3 +1,5 @@
+"""Role enforcement for the employee and director services."""
+
 from functools import wraps
 
 from flask import jsonify

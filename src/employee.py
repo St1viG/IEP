@@ -1,3 +1,9 @@
+"""The employee service: searching the fund's assets and proposing trades.
+
+Runs in three replicas, so it holds no state of its own. A proposal is written
+to Redis for the director to act on; nothing here ever changes an asset.
+"""
+
 import json
 import re
 import uuid

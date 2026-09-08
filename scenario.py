@@ -1,3 +1,13 @@
+"""An end-to-end exercise of all nine endpoints, including a full vote.
+
+Written to run against any deployment: host processes, Compose, or Kubernetes
+through port-forwards. Every run tags its own employee and assets, so it can be
+replayed against a live system without wiping anything first.
+
+    python scenario.py
+    AUTHENTICATION_URL=http://localhost:5100 python scenario.py
+"""
+
 import os
 import time
 import uuid

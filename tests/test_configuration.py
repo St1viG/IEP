@@ -12,8 +12,38 @@ import configuration
 ORIGINAL = configuration.Configuration
 
 
+# Everything Configuration reads. The environment is wiped of all of it before
+# each reload, so a test of the defaults is a test of the defaults even when the
+# suite itself runs inside a container that sets DATABASE_URL and friends.
+SETTINGS = [
+    "PRODUCTION",
+    "DATABASE_USERNAME",
+    "DATABASE_PASSWORD",
+    "DATABASE_URL",
+    "DATABASE_NAME",
+    "JWT_SECRET_KEY",
+    "MONGO_HOST",
+    "MONGO_PORT",
+    "MONGO_USERNAME",
+    "MONGO_PASSWORD",
+    "MONGO_AUTH_SOURCE",
+    "MONGO_DATABASE",
+    "MONGO_ASSETS",
+    "REDIS_HOST",
+    "REDIS_PORT",
+    "REDIS_ORDERS",
+    "REDIS_CONTRACTS",
+    "BLOCKCHAIN_URL",
+    "PORT",
+]
+
+
 def reload_with(**overrides):
     previous = dict(os.environ)
+
+    for name in SETTINGS:
+        os.environ.pop(name, None)
+
     os.environ.update(overrides)
     try:
         return importlib.reload(configuration).Configuration

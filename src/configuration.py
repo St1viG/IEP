@@ -1,3 +1,10 @@
+"""Every setting the three services read, in one place.
+
+The defaults describe deploy/development.yaml running on the host, so a bare
+`python src/employee.py` works with nothing in the environment. Compose and
+Kubernetes override each value with a service name.
+"""
+
 import os
 from datetime import timedelta
 

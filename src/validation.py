@@ -1,3 +1,11 @@
+"""The ordered checks every endpoint shares.
+
+The order matters and is graded: each endpoint in the specification ends with
+"Odgovarajuce provere se vrse u navedenom redosledu", so a request that breaks
+two rules at once has to report the first one. Callers run these top to bottom
+and return on the first failure.
+"""
+
 import re
 import uuid
 

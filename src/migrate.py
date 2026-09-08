@@ -1,3 +1,9 @@
+"""Creates the schema and seeds the initial director.
+
+Runs as a Kubernetes Job, which Kubernetes will retry, so every write below has
+to be a no-op the second time around. Nothing can log in until this has run.
+"""
+
 from flask import Flask
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash

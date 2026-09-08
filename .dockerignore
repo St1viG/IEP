@@ -4,7 +4,6 @@
 # and venv/ plus docs/ make that hundreds of megabytes of nothing.
 venv/
 docs/
-tests/
 .git/
 .github/
 __pycache__/
@@ -12,4 +11,3 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
-scenario.py

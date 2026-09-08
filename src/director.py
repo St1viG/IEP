@@ -1,3 +1,15 @@
+"""The director service: reviewing proposals, opening votes, and reporting.
+
+A proposal is not applied when the director acts on it. /decision deploys one
+Voting contract for that order and hands back the two ballots; the employees
+named as voters cast them whenever they like. A poller here notices when a
+contract has concluded and writes the outcome to MongoDB, so nobody has to call
+this service again for an approved order to take effect.
+
+Kept at one replica, though the settlement claim below would make more of them
+safe.
+"""
+
 import json
 import threading
 import time

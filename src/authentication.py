@@ -1,3 +1,10 @@
+"""The accounts service: registration, login, and account deletion.
+
+The only service that talks to MySQL, and the only one that mints tokens. The
+employee and director services verify what it issues without ever calling it,
+which is why all three have to agree on JWT_SECRET_KEY.
+"""
+
 from flask import Flask, Response, jsonify, request
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 from werkzeug.security import check_password_hash, generate_password_hash

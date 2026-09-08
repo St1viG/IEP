@@ -1,3 +1,11 @@
+"""The blockchain half of the director service.
+
+The contract is compiled ahead of time and its artifacts are committed, the way
+every course example ships them, so nothing here invokes solc. Ganache's first
+account is unlocked, which is what pays for each deployment and why no private
+key is ever handled.
+"""
+
 import json
 from pathlib import Path
 
