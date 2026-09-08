@@ -279,6 +279,18 @@ If you changed `models.py`, the migration has to run again against an empty data
 
 ---
 
+## When the registry is blocked
+
+The four project images build **with no network at all**: `wheels/` is committed
+alongside the source and the dockerfiles install with `--no-index --find-links /wheels`,
+so `pip` never reaches PyPI. Regenerate them with `spakuj-wheels.sh` if you ever change
+`requirements.txt` — the build fails loudly rather than quietly going online.
+
+That leaves seven images that have to come from somewhere: `python:3`, `mysql`, `mongo:7`,
+`redis`, `trufflesuite/ganache-cli`, `busybox:1.36` and `adminer`. Either Docker pulls them,
+or someone hands them over as tars and you `docker load -i` each one. Nothing else is needed,
+and cloning this repository is the only transfer that has to work.
+
 ## Verifying it on Windows
 
 The scripts were written on macOS and every `.sh` has been run there; the `.cmd` twins have not,

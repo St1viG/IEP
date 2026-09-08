@@ -5,7 +5,6 @@ Sve iz korena projekta. Na Windowsu `.cmd`, na Mac-u i u Git Bash-u `sh …`.
 ## Podizanje
 
 ```
-ucitaj-slike.cmd                  ucitaj slike iz images\ (masina bez Docker Hub-a)
 pokreni.cmd                       build + start, Compose
 pokreni-k8s.cmd                   isto na Kubernetesu, sa port-forward-ovima
 resetuj.cmd                       isprazni baze (Compose)
@@ -18,6 +17,19 @@ testovi.cmd                       174 testa u kontejneru
 Servisi: **5000** authentication, **5001** employee, **5002** director,
 **8545** ganache, **8080** adminer.
 Direktor: `onlymoney@gmail.com` / `evenmoremoney`.
+
+## Ako je Docker Hub blokiran
+
+Cetiri projektne slike se grade **bez mreze** — `wheels/` je u repozitorijumu i
+`pip` ne izlazi na PyPI. Sto znaci da treba samo sedam gotovih slika, koje ili
+povuce Docker, ili ih deli profesor:
+
+```
+python:3   mysql   mongo:7   redis   trufflesuite/ganache-cli   busybox:1.36   adminer
+```
+
+Ako ih profesor deli kao tar fajlove: `docker load -i <fajl>` za svaki, pa
+`pokreni.cmd` kao i inace.
 
 ## Modifikacija uzivo — bez build-a, bez mreze
 

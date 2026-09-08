@@ -97,8 +97,9 @@ sh oceni.sh          # the official grader              (Windows: oceni.cmd)
 sh deploy/proveri.sh director /report    # one route, with a token
 ```
 
-For a machine with no access to Docker Hub, `spakuj-slike.sh` writes every image this system needs
-into `images/` as `linux/amd64` tars, and `ucitaj-slike.cmd` loads them there.
+The four images build with no network: `wheels/` is committed alongside the source and pip installs
+with `--no-index`, so only the seven public base images have to come from anywhere. `spakuj-wheels.sh`
+regenerates them if `requirements.txt` changes.
 
 ### Local development
 

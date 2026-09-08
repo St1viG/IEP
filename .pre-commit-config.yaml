@@ -28,4 +28,4 @@ repos:
       # docs/materials carries the course slides and a jdbc jar. 3 MB is above
       # those and still well below anything that belongs in git lfs.
       - id: check-added-large-files
-        args: [--maxkb=3000]
+        args: [--maxkb=5000]
