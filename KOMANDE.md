@@ -8,6 +8,8 @@ Sve iz korena projekta. Na Windowsu `.cmd`, na Mac-u i u Git Bash-u `sh …`.
 ucitaj-slike.cmd                  ucitaj slike iz images\ (masina bez Docker Hub-a)
 pokreni.cmd                       build + start, Compose
 pokreni-k8s.cmd                   isto na Kubernetesu, sa port-forward-ovima
+resetuj.cmd                       isprazni baze (Compose)
+resetuj.cmd k8s                   isprazni baze i podigni ponovo (Kubernetes)
 oceni.cmd                         zvanicni grader        -> grade_report.json
 oceni.cmd k8s                     grader kroz k8s        -> grade_report_k8s.json
 testovi.cmd                       174 testa u kontejneru
@@ -82,6 +84,8 @@ kubectl delete -f deploy/k8s.yaml
 | `read-only file system` bilo gde u Dockeru | disk je pun; oslobodi mesto, restart Dockera, `docker builder prune -af` |
 | testovi preskacu umesto da rade | `docker compose -f deploy/development.yaml up -d` |
 | grader: `unrecognized arguments` | obrisi zaostali `grade_report.json` |
+| grader drugi put daje ~79% | grader je stateful i trazi praznu bazu — `resetuj.cmd` pa opet |
+| mongo pod `Error`, exit 62 | volumen je pisala novija verzija Mongo-a — `resetuj.cmd k8s` |
 | port 5000 zauzet (samo Mac) | `AUTHENTICATION_PORT=5100 EMPLOYEE_PORT=5101 DIRECTOR_PORT=5102 sh pokreni.sh` |
 
 ## Sta se boduje

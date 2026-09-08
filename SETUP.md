@@ -327,6 +327,8 @@ Things that differ on Windows and are worth watching for:
 | `read-only file system` anywhere in Docker | Docker's VM is out of disk | free space on the **host**, restart Docker, `docker builder prune -af` |
 | tests skip instead of running | the development stack is not up, or a host MySQL/MongoDB is shadowing a container on the same port | `docker compose -f deploy/development.yaml up -d`; check `lsof -i:27017` |
 | pytest: `unrecognized arguments` when running the grader | a leftover `grade_report.json` confuses pytest's rootdir | delete it and rerun |
+| the grader scores ~79% on a second run | it is stateful and assumes an empty database, so the first run's assets and accounts break the second | `resetuj.sh` (or `resetuj.sh k8s`) before each run |
+| mongo pod in `Error`, exit code 62 | the volume was written by a newer MongoDB; 7 refuses a `featureCompatibilityVersion` of 8.x | wipe the volume: `resetuj.sh k8s` |
 
 Keep an eye on free disk. When the host fills up, Docker's VM remounts read-only and the errors it
 then produces point nowhere near the real cause.

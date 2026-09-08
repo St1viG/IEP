@@ -4,6 +4,7 @@ docs/*
 !docs/Projekat/
 docs/Projekat/*
 !docs/Projekat/IEP_Projekat_2026.md
+!docs/materials
 
 venv/
 __pycache__/

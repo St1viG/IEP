@@ -31,8 +31,18 @@ done
 echo "[3/3] Snimanje javnih slika..."
 for image in $PUBLIC; do
     name=$(echo "$image" | tr '/:' '--')
-    docker save "$image" -o "images/${name}.tar"
+    # --platform je obavezan: Docker Desktop drzi multi-arch manifest, pa bi
+    # `docker save` bez njega snimio arm64 varijantu i tar bi se na Windowsu
+    # ucitao bez greske a onda odbio da se pokrene.
+    docker save --platform linux/amd64 "$image" -o "images/${name}.tar"
     echo "  $name.tar"
+done
+
+echo
+echo "Provera arhitekture:"
+for tar in images/*.tar; do
+    printf "  %-42s" "$(basename "$tar")"
+    tar -xOf "$tar" manifest.json 2>/dev/null | head -c 200 >/dev/null && echo "ok" || echo "?"
 done
 
 echo

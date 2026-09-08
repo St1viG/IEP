@@ -92,6 +92,7 @@ repository root. [`SETUP.md`](SETUP.md) covers all of this in far more detail, i
 sh pokreni.sh        # everything, in containers        (Windows: pokreni.cmd)
 sh pokreni-k8s.sh    # everything, on Kubernetes        (Windows: pokreni-k8s.cmd)
 sh testovi.sh        # the 174 tests, in a container    (Windows: testovi.cmd)
+sh resetuj.sh        # empty the databases              (Windows: resetuj.cmd)
 sh oceni.sh          # the official grader              (Windows: oceni.cmd)
 sh deploy/proveri.sh director /report    # one route, with a token
 ```
