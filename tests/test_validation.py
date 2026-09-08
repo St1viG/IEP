@@ -38,7 +38,7 @@ def test_message_matches_the_spec_exactly():
     assert missing_field_message("buying_price") == "Field buying_price is missing."
 
 
-@pytest.mark.parametrize("value", ["onlymoney@gmail.com", "a@b.c", "first.last@sub.domain.rs"])
+@pytest.mark.parametrize("value", ["onlymoney@gmail.com", "a@b.co", "first.last@sub.domain.rs"])
 def test_valid_emails_are_accepted(value):
     assert valid_email(value)
 
@@ -49,6 +49,8 @@ def test_valid_emails_are_accepted(value):
         "",
         "onlymoney",
         "onlymoney@gmail",
+        "onlymoney@gmail.",
+        "onlymoney@gmail.a",  # a one character top level domain is not an address
         "@gmail.com",
         "onlymoney@.com",
         "only money@gmail.com",

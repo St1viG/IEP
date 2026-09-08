@@ -175,7 +175,9 @@ spec:
     spec:
       containers:
         - name: mongo
-          image: mongo
+          # Pinned: mongo 8 refuses to start on Linux kernel 6.19 and newer
+          # (SERVER-121912), which is what a current Docker Desktop node runs.
+          image: mongo:7
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:

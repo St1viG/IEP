@@ -220,7 +220,7 @@ Three things worth understanding here:
 
 **Read optional fields with `body.get(name) is not None`, not `if name in body`.** A JSON `null` would otherwise reach `re.escape` or `parse_iso` and raise, and `/search` has no error message to return for it: the spec lists only the missing-header `401` here. Treating `null` as "field not given" is the only reading that keeps the endpoint answering `200`.
 
-**`role_check` lives in `decorators.py`**, copied from the course example. A director token gets `("Invalid role", 401)`, a shape the spec never mentions because it only describes the missing-header case.
+**`role_check` lives in `decorators.py`**, copied from the course example. A token for the wrong role gets `{"msg": "Missing Authorization Header"}` with `401`, the same answer as no token at all: the spec describes only the missing-header case, and the official grader expects that body for a wrong-role token too.
 
 ### 2.3 Done when
 

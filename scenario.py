@@ -30,8 +30,8 @@ DIRECTOR = {"email": "onlymoney@gmail.com", "password": "evenmoremoney"}
 
 
 def check(label, response, status=200, message=None):
-    # role_check answers "Invalid role" as plain text, a body the spec never
-    # describes, so not every response here is JSON.
+    # Not every response is JSON: a 500 from a service would arrive as an HTML
+    # traceback, and printing that beats raising on the decode.
     try:
         body = response.json()
     except ValueError:

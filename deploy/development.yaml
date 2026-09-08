@@ -15,7 +15,9 @@ services:
       - 8080:8080
 
   mongo:
-    image: mongo
+    # Pinned: mongo 8 refuses to start on Linux kernel 6.19 and newer, which is
+    # what Docker Desktop now ships (SERVER-121912). 7 is the newest that runs.
+    image: mongo:7
     environment:
       - MONGO_INITDB_ROOT_USERNAME=root
       - MONGO_INITDB_ROOT_PASSWORD=example

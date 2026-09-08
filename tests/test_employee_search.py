@@ -204,4 +204,6 @@ def test_search_without_a_header_answers_with_the_flask_jwt_extended_default(fun
 def test_a_director_token_cannot_search(fund, employee_client, director_headers):
     response = search(employee_client, director_headers)
 
+    # Same answer as no token at all, see test_report.py for why.
     assert response.status_code == 401
+    assert response.json == {"msg": "Missing Authorization Header"}

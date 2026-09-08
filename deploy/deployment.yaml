@@ -18,7 +18,8 @@ services:
       - 8080:8080
 
   mongo:
-    image: mongo
+    # See development.yaml: mongo 8 will not start on kernel 6.19 or newer.
+    image: mongo:7
     environment:
       - MONGO_INITDB_ROOT_USERNAME=root
       - MONGO_INITDB_ROOT_PASSWORD=example

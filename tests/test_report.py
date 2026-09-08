@@ -123,7 +123,13 @@ def test_the_three_sort_keys_are_applied_in_order(assets, director_client, direc
 
 
 def test_the_report_needs_a_director_token(director_client, employee_headers):
-    assert director_client.get("/report", headers=employee_headers).status_code == 401
+    wrong_role = director_client.get("/report", headers=employee_headers)
+
+    # A token for the wrong role is no more an authorization for this route than
+    # no token at all, so it gets the same answer. The spec describes only the
+    # missing-header case; the official grader expects this body for both.
+    assert wrong_role.status_code == 401
+    assert wrong_role.json == {"msg": "Missing Authorization Header"}
 
     response = director_client.get("/report")
 

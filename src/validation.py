@@ -1,7 +1,9 @@
 import re
 import uuid
 
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# The top level domain needs at least two characters: "john@gmail.a" is not
+# an address, and neither is "john@gmail." or "john@gmail".
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s.]{2,}$")
 
 
 def missing_field(body, names):
