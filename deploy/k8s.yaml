@@ -267,13 +267,17 @@ kind: Service
 metadata:
   name: ganache-service
 spec:
-  type: ClusterIP
+  # NodePort rather than ClusterIP: voters cast their ballots from outside the
+  # cluster, so the simulator has to be reachable from the host the same way the
+  # three web services are.
+  type: NodePort
   selector:
     app: ganache
   ports:
     - protocol: TCP
       port: 8545
       targetPort: 8545
+      nodePort: 30003
 ---
 apiVersion: batch/v1
 kind: Job

@@ -82,7 +82,8 @@ director-…         1/1  Running
 
 ### Reaching the services
 
-The three web services are `NodePort` on 30000 / 30001 / 30002. On minikube, `minikube ip` gives you
+The three web services are `NodePort` on 30000 / 30001 / 30002, and ganache on 30003 so
+voters can reach it from outside the cluster. On minikube, `minikube ip` gives you
 the host. On Docker Desktop and kind those ports are **not** published on the host, so use
 port-forwards instead — this still goes through Service → Deployment → pod, so the three employee
 replicas are genuinely being load balanced:
