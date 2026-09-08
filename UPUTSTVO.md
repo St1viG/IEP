@@ -45,10 +45,10 @@ Sve komande ispod se pokrecu **iz korena projekta**, tj. iz foldera `IEP`.
 
 ## Korak 2 — slike
 
-Cetiri projektne slike se grade lokalno i **ne traze mrezu**: sve biblioteke su
-u `wheels/` i `pip` ne izlazi na PyPI.
+Cetiri projektne slike se grade lokalno, a biblioteke mogu sa PyPI-ja ili iz
+`wheels/` bez mreze — vidi Korak 2b.
 
-Sedam javnih slika ipak mora odnekud da dodje:
+Sedam javnih slika mora odnekud da dodje:
 
 ```
 python:3   mysql   mongo:7   redis   trufflesuite/ganache-cli   busybox:1.36   adminer
@@ -67,6 +67,39 @@ Provera sta vec imas:
 ```cmd
 docker images
 ```
+
+---
+
+## Korak 2b — biblioteke: sa mreze ili iz `wheels/`
+
+Postoje dva nacina, i oba rade. Bira se u trenutku build-a, bez diranja koda.
+
+**Sa PyPI-ja (podrazumevano, treba mreza).** Tako je i u arhivi koja se predaje,
+gde `wheels/` ne postoji jer ne bi stao u ogranicenje velicine:
+
+```cmd
+pokreni.cmd
+```
+
+odnosno rucno:
+
+```cmd
+docker compose -f deploy/deployment.yaml build
+```
+
+**Iz `wheels/`, bez ikakve mreze.** Prvo napuni folder jednom, dok mreza jos
+postoji, pa gradi bez nje:
+
+```cmd
+sh spakuj-wheels.sh
+docker compose -f deploy/deployment.yaml build --build-arg PIP_ARGS="--no-index --find-links /wheels"
+```
+
+`spakuj-wheels.sh` povuce sve sto `requirements.txt` trazi, za obe arhitekture, i
+odmah proveri da instalacija prolazi sa iskljucenom mrezom. Zauzme oko 41 MB.
+
+Ako `wheels/` postoji u kloniranom repozitorijumu, drugi nacin radi odmah — ne
+treba ni skripta.
 
 ---
 

@@ -14,3 +14,6 @@ grade_report*.json
 
 # Slike za offline prenos: velike, idu na USB, ne u git.
 images/
+
+# Radni folder za pravljenje arhive za predaju.
+tocompress/

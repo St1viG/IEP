@@ -279,12 +279,30 @@ If you changed `models.py`, the migration has to run again against an empty data
 
 ---
 
-## When the registry is blocked
+## Two ways to install the dependencies
 
-The four project images build **with no network at all**: `wheels/` is committed
-alongside the source and the dockerfiles install with `--no-index --find-links /wheels`,
-so `pip` never reaches PyPI. Regenerate them with `spakuj-wheels.sh` if you ever change
-`requirements.txt` — the build fails loudly rather than quietly going online.
+Chosen at build time, no code change either way.
+
+**From PyPI** — the default, and what the submitted archive uses, since `wheels/` would
+not fit inside its size limit:
+
+```sh
+docker compose -f deploy/deployment.yaml build
+```
+
+**From `wheels/`, with no network at all** — fill the folder once while you still have
+a connection, then build without one:
+
+```sh
+sh spakuj-wheels.sh
+docker compose -f deploy/deployment.yaml build \
+    --build-arg PIP_ARGS="--no-index --find-links /wheels"
+```
+
+`spakuj-wheels.sh` downloads everything `requirements.txt` resolves to, for both
+`linux/amd64` and `linux/arm64`, and then verifies the install with the container's
+network disabled. About 41 MB. If you cloned the repository rather than unzipping the
+submission, `wheels/` is already there and the second form works immediately.
 
 That leaves seven images that have to come from somewhere: `python:3`, `mysql`, `mongo:7`,
 `redis`, `trufflesuite/ganache-cli`, `busybox:1.36` and `adminer`. Either Docker pulls them,

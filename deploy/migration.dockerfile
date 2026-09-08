@@ -3,10 +3,14 @@ FROM python:3
 COPY requirements.txt /requirements.txt
 COPY wheels /wheels
 
-# --no-index: install only from the wheels committed alongside the source, so the
-# build needs no PyPI. Regenerate them with spakuj-wheels.sh after touching
-# requirements.txt, or this fails loudly rather than silently reaching out.
-RUN pip install --no-cache-dir --no-index --find-links /wheels -r ./requirements.txt
+# From PyPI by default. To build with no network at all, fill wheels/ with
+# spakuj-wheels.sh and pass:
+#   --build-arg PIP_ARGS="--no-index --find-links /wheels"
+# The submitted archive ships without wheels/, which is why this cannot be the
+# default: there it has to reach PyPI like any other project.
+ARG PIP_ARGS=""
+
+RUN pip install --no-cache-dir ${PIP_ARGS} -r ./requirements.txt
 
 COPY src/configuration.py /configuration.py
 COPY src/models.py /models.py
